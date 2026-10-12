@@ -164,3 +164,35 @@ public static class ChatlyJson
                 ? value.GetString()
                 : null;
 }
+
+/// <summary>
+/// The metered event types <c>GET /v1/billing/usage</c> accepts.
+/// </summary>
+/// <remarks>
+/// The API validates against this closed list and answers a 400 for anything
+/// else, so these constants are the difference between a typo caught at
+/// compile time and one caught in production.
+/// </remarks>
+public static class ChatlyUsageEventTypes
+{
+    /// <summary>A conversation was opened.</summary>
+    public const string ConversationOpened = "conversation.opened";
+
+    /// <summary>A message was sent by a human agent.</summary>
+    public const string MessageSentAgent = "message.sent.agent";
+
+    /// <summary>A message was sent by a bot or AI agent.</summary>
+    public const string MessageSentBot = "message.sent.bot";
+
+    /// <summary>LLM tokens consumed.</summary>
+    public const string AiTokens = "ai.tokens";
+
+    /// <summary>All four, in the order the API lists them.</summary>
+    public static IReadOnlyList<string> All { get; } = new[]
+    {
+        ConversationOpened,
+        MessageSentAgent,
+        MessageSentBot,
+        AiTokens,
+    };
+}

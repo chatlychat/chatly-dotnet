@@ -118,24 +118,24 @@ an upsert only touches the fields you set.
 
 ### Credential
 
-| Method | Route |
-| --- | --- |
+| Method                 | Route                     |
+| ---------------------- | ------------------------- |
 | `chatly.WhoAmIAsync()` | `GET /v1/api-keys/whoami` |
 
 ### Contacts — `chatly.Contacts`
 
-| Method | Route |
-| --- | --- |
-| `ListAsync(options?)` | `GET /v1/contacts` |
-| `ListAllAsync(options?)` | auto-paginates `GET /v1/contacts` |
-| `GetAsync(contactId)` | `GET /v1/contacts/{id}` |
-| `UpsertAsync(contact)` | `POST /v1/contacts` |
-| `BulkUpsertAsync(contacts)` | `POST /v1/contacts/bulk` |
-| `MergeAsync(contactId, mergedContactId)` | `POST /v1/contacts/{id}/merge` |
-| `AddTagsAsync(contactId, tag)` | `POST /v1/contacts/{id}/tags` |
-| `RemoveTagAsync(contactId, tag)` | `DELETE /v1/contacts/{id}/tags/{tag}` |
-| `UnsubscribeAsync(contactId, unsubscribed = true, reason?)` | `POST /v1/contacts/{id}/unsubscribe` |
-| `JourneyAsync(contactId)` | `GET /v1/contacts/{id}/journey` |
+| Method                                                      | Route                                 |
+| ----------------------------------------------------------- | ------------------------------------- |
+| `ListAsync(options?)`                                       | `GET /v1/contacts`                    |
+| `ListAllAsync(options?)`                                    | auto-paginates `GET /v1/contacts`     |
+| `GetAsync(contactId)`                                       | `GET /v1/contacts/{id}`               |
+| `UpsertAsync(contact)`                                      | `POST /v1/contacts`                   |
+| `BulkUpsertAsync(contacts)`                                 | `POST /v1/contacts/bulk`              |
+| `MergeAsync(contactId, mergedContactId)`                    | `POST /v1/contacts/{id}/merge`        |
+| `AddTagsAsync(contactId, tag)`                              | `POST /v1/contacts/{id}/tags`         |
+| `RemoveTagAsync(contactId, tag)`                            | `DELETE /v1/contacts/{id}/tags/{tag}` |
+| `UnsubscribeAsync(contactId, unsubscribed = true, reason?)` | `POST /v1/contacts/{id}/unsubscribe`  |
+| `JourneyAsync(contactId)`                                   | `GET /v1/contacts/{id}/journey`       |
 
 `UpsertAsync` keys on `ExternalId`, so calling it twice with the same one
 updates a single record. `BulkUpsertAsync` takes up to 5000 rows per call and
@@ -143,22 +143,22 @@ reports per-row outcomes instead of failing the batch on one bad row.
 
 ### Conversations — `chatly.Conversations`
 
-| Method | Route |
-| --- | --- |
-| `ListAsync(options?)` | `GET /v1/conversations` |
-| `ListAllAsync(options?)` | auto-paginates `GET /v1/conversations` |
-| `GetAsync(conversationId)` | `GET /v1/conversations/{id}` |
-| `MessagesAsync(conversationId, options?)` | `GET /v1/conversations/{id}/messages` |
-| `MessagesAllAsync(conversationId, options?)` | auto-paginates the above |
-| `SendAsync(conversationId, message)` | `POST /v1/conversations/{id}/messages` |
-| `UnattendedAsync()` | `GET /v1/conversations/unattended` |
-| `AgentHandlingAsync(conversationId)` | `GET /v1/conversations/{id}/agent-handling` |
-| `SetAgentHandlingAsync(conversationId, state)` | `PUT /v1/conversations/{id}/agent-handling` |
-| `GeneratedRepliesAsync(conversationId)` | `GET /v1/conversations/{id}/generated-replies` |
-| `GenerateReplyAsync(conversationId, request?)` | `POST /v1/conversations/{id}/generated-replies` |
-| `ScheduledMessagesAsync(conversationId)` | `GET /v1/conversations/{id}/scheduled-messages` |
-| `ScheduleMessageAsync(conversationId, request)` | `POST /v1/conversations/{id}/scheduled-messages` |
-| `CancelScheduledAsync(scheduledMessageId)` | `DELETE /v1/conversations/scheduled-messages/{id}` |
+| Method                                          | Route                                              |
+| ----------------------------------------------- | -------------------------------------------------- |
+| `ListAsync(options?)`                           | `GET /v1/conversations`                            |
+| `ListAllAsync(options?)`                        | auto-paginates `GET /v1/conversations`             |
+| `GetAsync(conversationId)`                      | `GET /v1/conversations/{id}`                       |
+| `MessagesAsync(conversationId, options?)`       | `GET /v1/conversations/{id}/messages`              |
+| `MessagesAllAsync(conversationId, options?)`    | auto-paginates the above                           |
+| `SendAsync(conversationId, message)`            | `POST /v1/conversations/{id}/messages`             |
+| `UnattendedAsync()`                             | `GET /v1/conversations/unattended`                 |
+| `AgentHandlingAsync(conversationId)`            | `GET /v1/conversations/{id}/agent-handling`        |
+| `SetAgentHandlingAsync(conversationId, state)`  | `PUT /v1/conversations/{id}/agent-handling`        |
+| `GeneratedRepliesAsync(conversationId)`         | `GET /v1/conversations/{id}/generated-replies`     |
+| `GenerateReplyAsync(conversationId, request?)`  | `POST /v1/conversations/{id}/generated-replies`    |
+| `ScheduledMessagesAsync(conversationId)`        | `GET /v1/conversations/{id}/scheduled-messages`    |
+| `ScheduleMessageAsync(conversationId, request)` | `POST /v1/conversations/{id}/scheduled-messages`   |
+| `CancelScheduledAsync(scheduledMessageId)`      | `DELETE /v1/conversations/scheduled-messages/{id}` |
 
 A message sent with an API key is recorded as sent by an integration, not by
 whoever created the key — a key outlives the person who issued it, so
@@ -166,96 +166,114 @@ attributing its writes to them would be wrong the moment they leave.
 
 ### Tickets — `chatly.Tickets`
 
-| Method | Route |
-| --- | --- |
-| `ListAsync(options?)` / `ListAllAsync(options?)` | `GET /v1/tickets` |
-| `CommentsAsync(ticketId)` | `GET /v1/tickets/{id}/comments` |
-| `ForConversationAsync(conversationId)` | `GET /v1/tickets/for-conversation/{id}` |
-| `QueuesAsync()` | `GET /v1/tickets/queues` |
-| `MergeAsync(ticketId, request)` | `POST /v1/tickets/{id}/merge` |
-| `SplitAsync(ticketId, request)` | `POST /v1/tickets/{id}/split` |
-| `BulkAsync(request)` | `POST /v1/tickets/bulk` |
+| Method                                           | Route                                   |
+| ------------------------------------------------ | --------------------------------------- |
+| `ListAsync(options?)` / `ListAllAsync(options?)` | `GET /v1/tickets`                       |
+| `CommentsAsync(ticketId)`                        | `GET /v1/tickets/{id}/comments`         |
+| `ForConversationAsync(conversationId)`           | `GET /v1/tickets/for-conversation/{id}` |
+| `QueuesAsync()`                                  | `GET /v1/tickets/queues`                |
+| `MergeAsync(ticketId, request)`                  | `POST /v1/tickets/{id}/merge`           |
+| `SplitAsync(ticketId, request)`                  | `POST /v1/tickets/{id}/split`           |
+| `BulkAsync(request)`                             | `POST /v1/tickets/bulk`                 |
 
 ### Macros — `chatly.Macros`
 
-| Method | Route |
-| --- | --- |
-| `ListAsync(options?)` / `ListAllAsync(options?)` | `GET /v1/macros` |
-| `CreateAsync(macro)` | `POST /v1/macros` |
-| `UpdateAsync(macroId, changes)` | `PATCH /v1/macros/{id}` |
-| `DeleteAsync(macroId)` | `DELETE /v1/macros/{id}` |
+| Method                          | Route                    |
+| ------------------------------- | ------------------------ |
+| `ListAsync(options?)`           | `GET /v1/macros`         |
+| `CreateAsync(macro)`            | `POST /v1/macros`        |
+| `UpdateAsync(macroId, changes)` | `PATCH /v1/macros/{id}`  |
+| `DeleteAsync(macroId)`          | `DELETE /v1/macros/{id}` |
+
+`ListAsync` is the one list method here that is **not** paginated and does not
+return a page. The endpoint answers a bare JSON array — the service caps it at
+200 rows and orders them by usage rank, which is what makes the list useful to
+an agent picking a reply — so enumerate the array directly and expect no
+cursor:
+
+```csharp
+var macros = await chatly.Macros.ListAsync(new MacroListOptions { Scope = "team", Language = "fr" });
+foreach (var macro in macros.EnumerateArray())
+{
+    Console.WriteLine(macro.GetStringOrNull("name"));
+}
+```
+
+There is no `ListAllAsync` for macros, and `MacroListOptions` takes `Scope`,
+`Team`, `Query` and `Language` rather than a cursor or a limit — those are the
+parameters the route actually reads.
 
 ### Knowledge base — `chatly.Kb`
 
-| Method | Route |
-| --- | --- |
-| `ArticlesAsync(options?)` / `ArticlesAllAsync(options?)` | `GET /v1/kb/articles` |
-| `ArticleAsync(slug)` | `GET /v1/kb/articles/{slug}` |
-| `CollectionsAsync()` | `GET /v1/kb/collections` |
+| Method                                                   | Route                        |
+| -------------------------------------------------------- | ---------------------------- |
+| `ArticlesAsync(options?)` / `ArticlesAllAsync(options?)` | `GET /v1/kb/articles`        |
+| `ArticleAsync(slug)`                                     | `GET /v1/kb/articles/{slug}` |
+| `CollectionsAsync()`                                     | `GET /v1/kb/collections`     |
 
 ### Search — `chatly.Search`
 
-| Method | Route |
-| --- | --- |
-| `QueryAsync(query, options?)` | `GET /v1/search` |
-| `KbAsync(query)` | `GET /v1/search?kinds[]=kb` |
+| Method                        | Route                       |
+| ----------------------------- | --------------------------- |
+| `QueryAsync(query, options?)` | `GET /v1/search`            |
+| `KbAsync(query)`              | `GET /v1/search?kinds=kb`   |
 
 ### Events (CDP) — `chatly.Events`
 
-| Method | Route |
-| --- | --- |
-| `TrackAsync(contactId, name, properties?)` | `POST /v1/cdp/events` |
-| `ListAsync(options?)` / `ListAllAsync(options?)` | `GET /v1/cdp/events` |
+| Method                                           | Route                 |
+| ------------------------------------------------ | --------------------- |
+| `TrackAsync(contactId, name, properties?)`       | `POST /v1/cdp/events` |
+| `ListAsync(options?)` / `ListAllAsync(options?)` | `GET /v1/cdp/events`  |
 
 `ListAsync` takes an `EventsListOptions`, whose `ContactId` scopes the stream
 to one person.
 
 ### Webhook deliveries — `chatly.Webhooks`
 
-| Method | Route |
-| --- | --- |
-| `DeliveriesAsync(options?)` / `DeliveriesAllAsync(options?)` | `GET /v1/webhooks/deliveries` |
-| `DeliveryAsync(deliveryId)` | `GET /v1/webhooks/deliveries/{id}` |
-| `RedeliverAsync(deliveryId)` | `POST /v1/webhooks/deliveries/{id}/redeliver` |
+| Method                                                       | Route                                         |
+| ------------------------------------------------------------ | --------------------------------------------- |
+| `DeliveriesAsync(options?)` / `DeliveriesAllAsync(options?)` | `GET /v1/webhooks/deliveries`                 |
+| `DeliveryAsync(deliveryId)`                                  | `GET /v1/webhooks/deliveries/{id}`            |
+| `RedeliverAsync(deliveryId)`                                 | `POST /v1/webhooks/deliveries/{id}/redeliver` |
 
 ### Reports — `chatly.Reports`
 
-| Method | Route |
-| --- | --- |
-| `OverviewAsync(query?)` | `GET /v1/reports/overview` |
-| `AgentsAsync(query?)` | `GET /v1/reports/agents` |
+| Method                            | Route                                  |
+| --------------------------------- | -------------------------------------- |
+| `OverviewAsync(query?)`           | `GET /v1/reports/overview`             |
+| `AgentsAsync(query?)`             | `GET /v1/reports/agents`               |
 | `ConversationsByDayAsync(query?)` | `GET /v1/reports/conversations-by-day` |
-| `SlaAsync(query?)` | `GET /v1/reports/sla` |
+| `SlaAsync(query?)`                | `GET /v1/reports/sla`                  |
 
 Each accepts a `ChatlyQuery` for the date and grouping parameters, which differ
 per report; see the REST reference for what each one takes.
 
 ### Channels, billing, workspace
 
-| Method | Route |
-| --- | --- |
-| `chatly.Channels.ListAsync()` | `GET /v1/channels` |
-| `chatly.Channels.GetAsync(channelId)` | `GET /v1/channels/{id}` |
-| `chatly.Billing.PlansAsync()` | `GET /v1/billing/plans` |
-| `chatly.Billing.UsageAsync()` | `GET /v1/billing/usage` |
-| `chatly.Workspace.SettingsAsync()` | `GET /v1/workspace/settings` |
-| `chatly.Workspace.LabelsAsync()` | `GET /v1/labels` |
-| `chatly.Workspace.InboxesAsync()` | `GET /v1/inboxes` |
+| Method                                      | Route                        |
+| ------------------------------------------- | ---------------------------- |
+| `chatly.Channels.ListAsync()`               | `GET /v1/channels`           |
+| `chatly.Channels.GetAsync(channelId)`       | `GET /v1/channels/{id}`      |
+| `chatly.Billing.PlansAsync()`               | `GET /v1/billing/plans`      |
+| `chatly.Billing.UsageAsync(eventType, from?, to?)` | `GET /v1/billing/usage` |
+| `chatly.Workspace.SettingsAsync()`          | `GET /v1/workspace/settings` |
+| `chatly.Workspace.LabelsAsync()`            | `GET /v1/labels`             |
+| `chatly.Workspace.InboxesAsync()`           | `GET /v1/inboxes`            |
 | `chatly.Workspace.TeamMembersAsync(teamId)` | `GET /v1/teams/{id}/members` |
-| `chatly.Workspace.AgentSkillsAsync()` | `GET /v1/agents/skills` |
+| `chatly.Workspace.AgentSkillsAsync()`       | `GET /v1/agents/skills`      |
 
 ### Helpers, which make no HTTP call
 
-| Function | What it does |
-| --- | --- |
-| `ChatlyWebhooks.VerifySignature(body, header, secret, tolerance?, now?)` | Verify a webhook delivery |
-| `ChatlyWebhooks.Sign(body, secret, timestamp)` | Build a genuine signature header, for testing your own handler |
-| `ChatlyIdentity.Hash(secret, externalId)` | The widget's `userHash` |
+| Function                                                                 | What it does                                                   |
+| ------------------------------------------------------------------------ | -------------------------------------------------------------- |
+| `ChatlyWebhooks.VerifySignature(body, header, secret, tolerance?, now?)` | Verify a webhook delivery                                      |
+| `ChatlyWebhooks.Sign(body, secret, timestamp)`                           | Build a genuine signature header, for testing your own handler |
+| `ChatlyIdentity.Hash(secret, externalId)`                                | The widget's `userHash`                                        |
 
 ### Not included, and why
 
 Reactions and channel/widget configuration have no methods here. A reaction
-records *who* reacted and an API key is not a person, so those routes require
+records _who_ reacted and an API key is not a person, so those routes require
 a signed-in user and answer a key with 403. Channel configuration needs a
 scope no key can hold. Both used to be in our Node SDK and both failed for
 every caller — shipping a method that always fails is worse than not shipping
@@ -291,8 +309,13 @@ your rate limit.
 
 `ListOptions` carries `Cursor`, `Limit`, `Filter` (sent as repeated
 `filter[]`), `Sort`, `Fields` and an `Extra` escape hatch for endpoint-specific
-parameters. Repeated parameters stay repeated:
-`kinds[]=kb&kinds[]=article` is two parameters, never one comma-joined value.
+parameters. Repeated parameters stay repeated: `kinds=kb&kinds=ticket` is two
+parameters, never one comma-joined value.
+
+Not every list endpoint is paginated. `GET /v1/macros` is pagination-exempt and
+returns a bare array (see above); the paginated ones are contacts,
+conversations, a conversation's messages, tickets, KB articles, CDP events and
+webhook deliveries.
 
 **Do not page or sort on `id`.** Ids in this product are a mix of UUID v4 and
 v7, so id order is neither insertion order nor time order. The cursor is the
@@ -306,16 +329,16 @@ Every failure is a typed exception deriving from `ChatlyException`, carrying
 `Status`, `Code`, `RequestId` (from the `x-request-id` response header) and
 `Body` (the raw response text).
 
-| Exception | When |
-| --- | --- |
-| `ChatlyAuthenticationException` | 401 — the key is missing, malformed or revoked |
-| `ChatlyPermissionException` | 403 — the key is valid but lacks the scope |
-| `ChatlyNotFoundException` | 404 — no such record in this workspace |
-| `ChatlyConflictException` | 409 — conflicting write, or an idempotency-key replay mismatch |
-| `ChatlyValidationException` | 400 / 422 — the body or query was rejected |
-| `ChatlyRateLimitException` | 429 — carries `RetryAfter` |
-| `ChatlyServerException` | 5xx |
-| `ChatlyTransportException` | never reached the API: DNS, connect, TLS, timeout. `Status` is 0 |
+| Exception                       | When                                                             |
+| ------------------------------- | ---------------------------------------------------------------- |
+| `ChatlyAuthenticationException` | 401 — the key is missing, malformed or revoked                   |
+| `ChatlyPermissionException`     | 403 — the key is valid but lacks the scope                       |
+| `ChatlyNotFoundException`       | 404 — no such record in this workspace                           |
+| `ChatlyConflictException`       | 409 — conflicting write, or an idempotency-key replay mismatch   |
+| `ChatlyValidationException`     | 400 / 422 — the body or query was rejected                       |
+| `ChatlyRateLimitException`      | 429 — carries `RetryAfter`                                       |
+| `ChatlyServerException`         | 5xx                                                              |
+| `ChatlyTransportException`      | never reached the API: DNS, connect, TLS, timeout. `Status` is 0 |
 
 "My key is wrong" and "my key lacks a scope" are different types, so you never
 have to parse a message string:
@@ -365,7 +388,7 @@ Retry = ChatlyRetryPolicy.None
 
 Every write (POST/PUT/PATCH/DELETE) carries an `Idempotency-Key`, minted fresh
 per call, so an SDK-level retry cannot double-write — a retried attempt
-re-sends the *same* key, which is the whole reason the header exists.
+re-sends the _same_ key, which is the whole reason the header exists.
 
 When **your** code is the thing retrying — a job that may run twice, a
 queue with at-least-once delivery — pin the key so the API replays the first
@@ -376,9 +399,28 @@ await chatly.WithIdempotencyKey($"refund-{orderId}")
             .Contacts.UpsertAsync(new ContactInput { ExternalId = $"order-{orderId}" });
 ```
 
-Same key + same body replays the first response. Same key + a *different* body
+Same key + same body replays the first response. Same key + a _different_ body
 is a 409. `WithIdempotencyKey` returns a derived client over the same
 `HttpClient`; the original is unchanged.
+
+---
+
+## Metered usage
+
+`UsageAsync` needs an event type: the API validates it against a closed list
+and rejects the call without one, so there is no "usage overall" form. Ask for
+one metric at a time, and use the constants rather than typing the strings:
+
+```csharp
+var usage = await chatly.Billing.UsageAsync(ChatlyUsageEventTypes.AiTokens);
+Console.WriteLine(usage.GetProperty("total").GetInt32());
+```
+
+`ChatlyUsageEventTypes` holds the four the API accepts:
+`conversation.opened`, `message.sent.agent`, `message.sent.bot` and
+`ai.tokens`. The window defaults to the current calendar month; pass `from` and
+`to` for any other range, and the response echoes the resolved window back
+alongside `total` and `count`.
 
 ---
 
@@ -387,7 +429,7 @@ is a 409. `WithIdempotencyKey` returns a derived client over the same
 Chatly signs every outbound event webhook. The header is
 **`x-livechat-signature`** and looks like `t=1700000000,v1=<hex>`, where `v1`
 is HMAC-SHA256 over the bytes `` `<t>.<raw body>` ``. The timestamp is bound
-*into* the digest, which is what makes the replay window enforceable.
+_into_ the digest, which is what makes the replay window enforceable.
 
 **Verify against the raw bytes.** Re-serialising parsed JSON reorders keys and
 changes whitespace, and the digest will not match. In ASP.NET Core that means
@@ -535,7 +577,7 @@ await foreach (var row in chatly.RequestAllAsync("/v1/audit-logs", new ListOptio
 }
 ```
 
-A route that does *not* accept an API key answers 403 no matter what you send:
+A route that does _not_ accept an API key answers 403 no matter what you send:
 those need a signed-in person, and no header substitutes for one.
 
 ---
@@ -576,7 +618,7 @@ both pinned vectors (the identity-hash digest and the exact webhook delivery),
 and drives all 55 methods to assert the HTTP verb and path each one produces.
 
 Running it also regenerates `surface.lock.json`, the committed record of the
-request each method was *observed* to issue, and fails if that disagrees with
+request each method was _observed_ to issue, and fails if that disagrees with
 the shared manifest in `packages/sdk-spec/surface.json`. The lock is produced
 by executing the client rather than by reading its source, so a path assembled
 at runtime is still recorded and a doc comment cannot fake a method.

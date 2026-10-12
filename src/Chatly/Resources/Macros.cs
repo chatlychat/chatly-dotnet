@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.Net.Http;
 using System.Text.Json;
 using System.Threading;
@@ -18,31 +17,47 @@ public sealed class MacrosResource
 
     internal MacrosResource(Transport transport) => _transport = transport;
 
-    /// <summary>One page of macros. <c>GET /v1/macros</c>.</summary>
+    /// <summary>
+    /// The macro library. <c>GET /v1/macros</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>This endpoint is not paginated and does not return a page.</b> It
+    /// answers a bare JSON array, so the returned element's
+    /// <c>ValueKind</c> is <see cref="JsonValueKind.Array"/> — enumerate it
+    /// directly; there is no <c>items</c> property and no cursor. The handler
+    /// is marked pagination-exempt on purpose: the service caps the result at
+    /// 200 rows and orders them by usage rank, which is what makes the list
+    /// useful to an agent picking a reply.
+    /// </para>
+    /// <para>
+    /// There is deliberately no <c>ListAllAsync</c> here. An auto-paginator
+    /// over a route with no cursor would either return one page and look
+    /// complete, or spin; and the 200-row cap is the real answer to "give me
+    /// everything", not a page size.
+    /// </para>
+    /// </remarks>
     /// <param name="cancellationToken">Cancels the request.</param>
-    /// <returns>The first page.</returns>
-    public Task<Page<JsonElement>> ListAsync(CancellationToken cancellationToken = default)
+    /// <returns>A JSON array of macros, newest-ranked first.</returns>
+    public Task<JsonElement> ListAsync(CancellationToken cancellationToken = default)
         => ListAsync(null, cancellationToken);
 
-    /// <summary>One page of macros, filtered. <c>GET /v1/macros</c>.</summary>
-    /// <param name="options">Cursor, limit, filters, sort.</param>
+    /// <summary>
+    /// The macro library, narrowed. <c>GET /v1/macros</c>.
+    /// </summary>
+    /// <remarks>
+    /// Takes <see cref="MacroListOptions"/> rather than
+    /// <see cref="ListOptions"/>: this route accepts <c>scope</c>,
+    /// <c>team</c>, <c>query</c> and <c>language</c>, and has no use for a
+    /// cursor, a limit or a sort.
+    /// </remarks>
+    /// <param name="options">Scope, team, text filter, preferred language.</param>
     /// <param name="cancellationToken">Cancels the request.</param>
-    /// <returns>The requested page.</returns>
-    public Task<Page<JsonElement>> ListAsync(ListOptions? options, CancellationToken cancellationToken = default)
-        => _transport.GetPageAsync(Collection, ListOptions.QueryFor(options), cancellationToken);
-
-    /// <summary>Every macro, page by page.</summary>
-    /// <param name="cancellationToken">Stops the walk.</param>
-    /// <returns>An async stream of macros.</returns>
-    public IAsyncEnumerable<JsonElement> ListAllAsync(CancellationToken cancellationToken = default)
-        => ListAllAsync(null, cancellationToken);
-
-    /// <summary>Every macro matching the options, page by page.</summary>
-    /// <param name="options">Limit, filters, sort, starting cursor.</param>
-    /// <param name="cancellationToken">Stops the walk.</param>
-    /// <returns>An async stream of macros.</returns>
-    public IAsyncEnumerable<JsonElement> ListAllAsync(ListOptions? options, CancellationToken cancellationToken = default)
-        => _transport.WalkPagesAsync(Collection, options, cancellationToken);
+    /// <returns>A JSON array of macros.</returns>
+    public Task<JsonElement> ListAsync(
+        MacroListOptions? options,
+        CancellationToken cancellationToken = default)
+        => _transport.GetJsonAsync(Collection, options?.ToQuery(), cancellationToken);
 
     /// <summary>Create a macro. <c>POST /v1/macros</c>.</summary>
     /// <param name="macro">The macro to create, serialized as the request body.</param>

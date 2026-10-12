@@ -265,3 +265,50 @@ public sealed record SearchOptions : ListOptions
      */
     protected internal override ChatlyQuery ToQuery() => base.ToQuery().AddEach("kinds", Kinds);
 }
+
+/// <summary>
+/// Options for <c>GET /v1/macros</c>.
+/// </summary>
+/// <remarks>
+/// Not a <see cref="ListOptions"/>, because that route is not a list in the
+/// paginated sense: it is pagination-exempt, capped at 200 rows and ordered by
+/// usage rank, so it has no cursor, limit, sort or sparse-fieldset support.
+/// These four parameters are what it actually reads.
+/// </remarks>
+public sealed record MacroListOptions
+{
+    /// <summary>
+    /// Visibility scope to filter by — a macro is personal, team-wide or
+    /// workspace-wide. Omit for everything the key can see.
+    /// </summary>
+    public string? Scope { get; init; }
+
+    /// <summary>Restrict to one team's macros. A team id.</summary>
+    public string? Team { get; init; }
+
+    /// <summary>Free-text filter over the macro's name and body.</summary>
+    public string? Query { get; init; }
+
+    /// <summary>
+    /// Rank macros written in this language first, e.g. <c>fr</c>.
+    /// </summary>
+    /// <remarks>
+    /// Ranking, not filtering: an agent answering in French wants the French
+    /// replies at the top but must still be able to reach an English one. An
+    /// unrecognised value simply ranks nothing.
+    /// </remarks>
+    public string? Language { get; init; }
+
+    /// <summary>Extra parameters appended after the ones above.</summary>
+    public ChatlyQuery? Extra { get; init; }
+
+    /// <summary>Render these options as query parameters.</summary>
+    /// <returns>A fresh query carrying every set option.</returns>
+    internal ChatlyQuery ToQuery()
+        => new ChatlyQuery()
+            .Add("scope", Scope)
+            .Add("team", Team)
+            .Add("query", Query)
+            .Add("language", Language)
+            .AddRange(Extra);
+}

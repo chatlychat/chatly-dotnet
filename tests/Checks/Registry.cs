@@ -78,7 +78,13 @@ public static class CheckRegistry
         new Check("§2 null fields are omitted from bodies", ContractChecks.NullFieldsAreOmittedFromBodies),
         new Check("§2 path parameters are percent-encoded", ContractChecks.PathParametersAreEncoded),
 
+        new Check("GET /v1/macros decodes as a bare array, not a page", RouteShapeChecks.MacroLibraryIsABareArray),
+        new Check("GET /v1/macros takes scope/team/query/language, not a cursor", RouteShapeChecks.MacroLibraryTakesItsOwnFilters),
+        new Check("GET /v1/billing/usage requires an eventType", RouteShapeChecks.BillingUsageRequiresAnEventType),
+        new Check("GET /v1/billing/usage sends the eventType and window", RouteShapeChecks.BillingUsageSendsEventTypeAndWindow),
+
         new Check("surface.json: the table covers all 55 methods", SurfaceChecks.TableCoversTheWholeSpec),
+        new Check("surface.json: the fake's response shapes match the manifest", SurfaceChecks.DeclaredShapesMatchTheManifestAsync),
         new Check("surface.json: every method hits its specified route", SurfaceChecks.EveryMethodHitsTheSpecifiedRoute),
         new Check("surface.json: every paged entry has an auto-paginator", SurfaceChecks.EveryPagedEntryHasAnAutoPaginator),
         new Check("§8 the escape hatch reaches unmodelled routes", SurfaceChecks.EscapeHatchReachesUnmodelledRoutes),

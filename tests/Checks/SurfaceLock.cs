@@ -72,39 +72,8 @@ public static class SurfaceLock
     /// </summary>
     public static async Task GenerateAndAssertAsync()
     {
-        var packageDirectory = FindUpwards(directory => File.Exists(Path.Combine(directory, "Chatly.sln")))
-            ?? throw new CheckFailedException(
-                "could not find the sdk-dotnet package directory (looked for Chatly.sln above "
-                + AppContext.BaseDirectory + ")");
-
-        // Monorepo first, then the copy a public mirror vendors at its root: a mirror
-        // has no "packages/" above the package, and without this candidate the surface
-        // proof cannot run there at all.
-        string[] candidates =
-        {
-            Path.Combine("packages", "sdk-spec", "surface.json"),
-            Path.Combine("sdk-spec", "surface.json"),
-        };
-        string? manifestFile = null;
-        foreach (var candidate in candidates)
-        {
-            var root = FindUpwards(directory => File.Exists(Path.Combine(directory, candidate)));
-            if (root is not null)
-            {
-                manifestFile = Path.Combine(root, candidate);
-                break;
-            }
-        }
-
-        if (manifestFile is null)
-        {
-            throw new CheckFailedException(
-                "could not find sdk-spec/surface.json above " + AppContext.BaseDirectory
-                + " — the lock is asserted against the manifest, so a missing manifest is a failure, "
-                + "not a skip.");
-        }
-
-        var manifest = ReadManifest(manifestFile);
+        var packageDirectory = Manifest.PackageDirectory();
+        var manifest = Manifest.Load();
 
         // Drift guard: the table that drives the invocations must cover exactly
         // the manifest, no more and no less. When the manifest changed
@@ -128,7 +97,9 @@ public static class SurfaceLock
         {
             var invocation = SurfaceChecks.Entries.First(row => row.Name == entry.Key);
 
-            var handler = new FakeHandler(FakeResponse.Page());
+            // The shape this route really answers with — not a page envelope
+            // for everything, which is what hid the macros decode failure.
+            var handler = new FakeHandler(FakeResponse.For(invocation.Shape));
             using var client = Fake.Client(handler);
             await invocation.Invoke(client, CancellationToken.None);
 
@@ -200,26 +171,6 @@ public static class SurfaceLock
         return string.Join("/", issued);
     }
 
-    private static IReadOnlyList<SurfaceLockEntry> ReadManifest(string path)
-    {
-        using var document = JsonDocument.Parse(File.ReadAllText(path));
-        var entries = new List<SurfaceLockEntry>();
-
-        foreach (var element in document.RootElement.GetProperty("entries").EnumerateArray())
-        {
-            entries.Add(new SurfaceLockEntry
-            {
-                Ns = element.GetProperty("ns").GetString() ?? string.Empty,
-                Name = element.GetProperty("name").GetString() ?? string.Empty,
-                Http = element.GetProperty("http").GetString() ?? string.Empty,
-                Path = element.GetProperty("path").GetString() ?? string.Empty,
-            });
-        }
-
-        Expect.True(entries.Count > 0, "the manifest lists at least one entry");
-        return entries;
-    }
-
     private static void Write(string path, IReadOnlyList<SurfaceLockEntry> entries)
     {
         var document = new Dictionary<string, object>
@@ -237,22 +188,6 @@ public static class SurfaceLock
 
         var json = JsonSerializer.Serialize(document, new JsonSerializerOptions { WriteIndented = true });
         File.WriteAllText(path, json + Environment.NewLine);
-    }
-
-    private static string? FindUpwards(Func<string, bool> predicate)
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null)
-        {
-            if (predicate(directory.FullName))
-            {
-                return directory.FullName;
-            }
-
-            directory = directory.Parent;
-        }
-
-        return null;
     }
 
     private static string Join(IEnumerable<string> values)

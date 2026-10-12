@@ -38,6 +38,26 @@ public sealed class RecordedRequest
     public string Path => Uri.AbsolutePath;
 }
 
+/// <summary>
+/// The shape of a successful response from one route.
+/// </summary>
+/// <remarks>
+/// Declared per route rather than assumed, because the API has all three and
+/// a client that guesses wrong fails at decode time — in production, against a
+/// suite that passed.
+/// </remarks>
+public enum ResponseShape
+{
+    /// <summary>A JSON object: one record, or a summary.</summary>
+    Object = 0,
+
+    /// <summary>A bare JSON array: a pagination-exempt list.</summary>
+    Array = 1,
+
+    /// <summary>A <c>{ items, nextCursor }</c> page.</summary>
+    Page = 2,
+}
+
 /// <summary>What the fake transport should answer with.</summary>
 public sealed class FakeResponse
 {
@@ -56,8 +76,33 @@ public sealed class FakeResponse
 
     public static FakeResponse Ok(string body = "{}") => new FakeResponse(200, body);
 
+    /// <summary>A <c>{ items, nextCursor }</c> page — ONLY for a route the manifest marks paged.</summary>
+    /// <remarks>
+    /// Do not reach for this as a general-purpose "success". A fake that
+    /// answers every route with a page envelope is why this SDK's suite stayed
+    /// green while <c>Macros.ListAsync</c> could not decode a real response:
+    /// that route is pagination-exempt and returns a bare array, and the
+    /// fixture invented a shape the server never sends. Shapes are declared
+    /// per route in <see cref="SurfaceChecks.Entries"/> and tied back to the
+    /// manifest's <c>paged</c> flag by
+    /// <see cref="SurfaceChecks.DeclaredShapesMatchTheManifestAsync"/>.
+    /// </remarks>
     public static FakeResponse Page(string items = "[]", string? nextCursor = null)
         => Ok($"{{\"items\":{items},\"nextCursor\":{(nextCursor is null ? "null" : $"\"{nextCursor}\"")}}}");
+
+    /// <summary>A bare JSON array, as a pagination-exempt list route answers.</summary>
+    public static FakeResponse Array(string items = "[]") => Ok(items);
+
+    /// <summary>A plain JSON object, the shape of a single-record or summary route.</summary>
+    public static FakeResponse Object(string body = "{}") => Ok(body);
+
+    /// <summary>The success body for one declared response shape.</summary>
+    public static FakeResponse For(ResponseShape shape) => shape switch
+    {
+        ResponseShape.Page => Page(),
+        ResponseShape.Array => Array(),
+        _ => Object(),
+    };
 
     public static FakeResponse Error(int status, string code, string message, string? requestId = "req_test")
     {

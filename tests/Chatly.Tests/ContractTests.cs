@@ -35,7 +35,7 @@ public class ContractTests
     public void RegistryIsNotEmpty()
     {
         Assert.True(
-            CheckRegistry.All.Count >= 40,
-            $"the check registry should hold at least 40 checks, found {CheckRegistry.All.Count}");
+            CheckRegistry.All.Count >= 45,
+            $"the check registry should hold at least 45 checks, found {CheckRegistry.All.Count}");
     }
 }

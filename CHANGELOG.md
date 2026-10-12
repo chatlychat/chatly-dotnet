@@ -23,9 +23,18 @@ First release.
   `Idempotency-Key`.
 - Idempotency: a fresh UUID per write, and `WithIdempotencyKey(key)` to pin one
   across writes for retrying the same logical operation.
-- Auto-pagination as `IAsyncEnumerable<JsonElement>` on every paged route
+- Auto-pagination as `IAsyncEnumerable<JsonElement>` on the seven paged routes
   (`ListAllAsync` and friends), stopping on a null cursor and on a repeated
-  one.
+  one. `GET /v1/macros` is deliberately not among them: it is
+  pagination-exempt and answers a bare JSON array capped at 200 rows by usage
+  rank, so `Macros.ListAsync` returns that array and there is no
+  `Macros.ListAllAsync`.
+- `Billing.UsageAsync(eventType, from?, to?)` takes the event type as a
+  required argument, with `ChatlyUsageEventTypes` for the four values the API
+  accepts. The endpoint validates it against a closed list and 400s without
+  one, so an optional argument could never have worked.
+- `Search` sends a plain repeated `kinds` parameter, which is the spelling the
+  API's own schema keys on.
 - Webhook verification: `ChatlyWebhooks.VerifySignature`, HMAC-SHA256 over
   `<t>.<raw body>`, constant-time compare, 300-second default tolerance, and
   `false` rather than an exception on anything malformed. `ChatlyWebhooks.Sign`
