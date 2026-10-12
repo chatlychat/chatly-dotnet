@@ -12,7 +12,7 @@ namespace Chatly;
 /// <para>
 /// Only <see cref="ApiKey"/> is required. The default <see cref="BaseUrl"/> is
 /// the production host, <c>https://api.chatlychat.com</c> — override it only
-/// for a self-hosted install.
+/// to reach another Chatly environment.
 /// </para>
 /// <para>
 /// This is a record, so a derived configuration is a <c>with</c> expression:
@@ -46,7 +46,7 @@ public sealed record ChatlyClientOptions
     /// <summary>
     /// Where the API lives. Defaults to <see cref="ProductionBaseUrl"/>.
     /// A path prefix is honoured, so <c>https://chat.example.com/api</c> works
-    /// for a self-hosted install behind a shared hostname.
+    /// when another environment is served under a path prefix.
     /// </summary>
     public Uri BaseUrl { get; init; } = ProductionBaseUrl;
 

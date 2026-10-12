@@ -540,16 +540,18 @@ those need a signed-in person, and no header substitutes for one.
 
 ---
 
-## Self-hosting
+## Pointing at another environment
 
-The base URL defaults to `https://api.chatlychat.com`. Override it only for a
-self-hosted install; a path prefix is honoured:
+The base URL defaults to `https://api.chatlychat.com`. Override it to reach
+another Chatly environment, or a test server in your own suite. It must be an
+absolute URI, and a path prefix is honoured — every route is appended to the
+path you give, so an API served under `/api` works:
 
 ```csharp
 var chatly = new ChatlyClient(new ChatlyClientOptions
 {
     ApiKey = key,
-    BaseUrl = new Uri("https://chat.internal.example.com/api"),
+    BaseUrl = new Uri("https://chat.example.com/api"),
 });
 ```
 

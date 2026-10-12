@@ -456,14 +456,20 @@ public static class ContractChecks
 
         await client.Search.QueryAsync(
             "refund policy",
-            new SearchOptions { Kinds = new[] { "kb", "article" }, Limit = 5 },
+            // `ticket`, not `article`: SEARCH_KINDS is contact|conversation|
+            // message|ticket|kb, so `article` is a 400.
+            new SearchOptions { Kinds = new[] { "kb", "ticket" }, Limit = 5 },
             CancellationToken.None);
 
-        var kinds = Fake.QueryValues(handler.Last, "kinds[]");
-        Expect.Equal(2, kinds.Count, "kinds[] appears twice");
-        Expect.Equal("kb,article", string.Join(",", kinds), "both values, as separate parameters");
+        // PLAIN `kinds`. This asserted the bracketed spelling, which the API's
+        // zod object schema strips — so the assertion held the bug in place:
+        // the search ran unnarrowed and answered 200.
+        var kinds = Fake.QueryValues(handler.Last, "kinds");
+        Expect.Equal(2, kinds.Count, "kinds appears twice");
+        Expect.Equal("kb,ticket", string.Join(",", kinds), "both values, as separate parameters");
         Expect.Equal("refund policy", Fake.QueryValues(handler.Last, "q").SingleOrDefault(), "q is encoded, not mangled");
-        Expect.Contains(handler.Last.Uri.Query, "kinds%5B%5D=kb", "the brackets are percent-encoded");
+        Expect.Contains(handler.Last.Uri.Query, "kinds=kb", "sent as a plain repeated key");
+        Expect.Equal(0, Fake.QueryValues(handler.Last, "kinds[]").Count, "no bracketed key is sent");
 
         await client.Contacts.ListAsync(
             new ListOptions { Filter = new[] { "status:open", "channel:web" }, Sort = "-createdAt", Fields = new[] { "id", "email" } },

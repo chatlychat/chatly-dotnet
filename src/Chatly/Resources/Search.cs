@@ -30,7 +30,7 @@ public sealed class SearchResource
     /// </summary>
     /// <remarks>
     /// <see cref="SearchOptions.Kinds"/> goes out as repeated
-    /// <c>kinds[]</c> parameters — <c>kinds[]=kb&amp;kinds[]=article</c>, two
+    /// <c>kinds</c> parameters — <c>kinds=kb&amp;kinds=ticket</c>, two
     /// parameters, never one comma-joined value.
     /// </remarks>
     /// <param name="query">The search text.</param>
@@ -54,12 +54,12 @@ public sealed class SearchResource
 
     /// <summary>
     /// Search help-centre articles only — <c>GET /v1/search</c> with
-    /// <c>kinds[]=kb</c>.
+    /// <c>kinds=kb</c>.
     /// </summary>
     /// <remarks>
     /// Worth its own method because "find the article that answers this" is
     /// the common case, and getting there otherwise means knowing the
-    /// <c>kinds[]</c> parameter exists.
+    /// <c>kinds</c> parameter exists.
     /// </remarks>
     /// <param name="query">The search text.</param>
     /// <param name="cancellationToken">Cancels the request.</param>

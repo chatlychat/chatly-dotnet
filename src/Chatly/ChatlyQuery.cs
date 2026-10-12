@@ -13,7 +13,7 @@ namespace Chatly;
 /// <remarks>
 /// <para>
 /// This exists instead of a dictionary because the API's array parameters are
-/// repeated keys, not comma-joined values: <c>kinds[]=kb&amp;kinds[]=article</c>
+/// repeated keys, not comma-joined values: <c>kinds=kb&amp;kinds=ticket</c>
 /// is two parameters. A <c>Dictionary&lt;string, string&gt;</c> cannot express
 /// that, and joining with commas silently sends one value the API reads as a
 /// single odd string.
@@ -246,11 +246,22 @@ public sealed record EventsListOptions : ListOptions
 public sealed record SearchOptions : ListOptions
 {
     /// <summary>
-    /// Which kinds of record to search, sent as repeated <c>kinds[]</c>
+    /// Which kinds of record to search, sent as repeated <c>kinds</c>
     /// parameters. Omit to search everything the key can read.
     /// </summary>
     public IReadOnlyList<string>? Kinds { get; init; }
 
     /// <inheritdoc />
-    protected internal override ChatlyQuery ToQuery() => base.ToQuery().AddEach("kinds[]", Kinds);
+    /*
+     * `kinds`, not `kinds[]`.
+     *
+     * `searchQuerySchema` is a zod object with a key named `kinds`, and a
+     * query parser leaves `kinds[]` as a literal key — which the object
+     * schema strips. The search then ran UNNARROWED and returned 200, so a
+     * caller asking for help-centre articles got contacts, conversations,
+     * messages and tickets with nothing to indicate the filter was ignored.
+     * The schema folds the bracketed spelling now, for clients already
+     * published; the plain repeated key is what it declares.
+     */
+    protected internal override ChatlyQuery ToQuery() => base.ToQuery().AddEach("kinds", Kinds);
 }
