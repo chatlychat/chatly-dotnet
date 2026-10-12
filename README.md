@@ -213,10 +213,10 @@ parameters the route actually reads.
 
 ### Search — `chatly.Search`
 
-| Method                        | Route                       |
-| ----------------------------- | --------------------------- |
-| `QueryAsync(query, options?)` | `GET /v1/search`            |
-| `KbAsync(query)`              | `GET /v1/search?kinds=kb`   |
+| Method                        | Route                     |
+| ----------------------------- | ------------------------- |
+| `QueryAsync(query, options?)` | `GET /v1/search`          |
+| `KbAsync(query)`              | `GET /v1/search?kinds=kb` |
 
 ### Events (CDP) — `chatly.Events`
 
@@ -250,17 +250,17 @@ per report; see the REST reference for what each one takes.
 
 ### Channels, billing, workspace
 
-| Method                                      | Route                        |
-| ------------------------------------------- | ---------------------------- |
-| `chatly.Channels.ListAsync()`               | `GET /v1/channels`           |
-| `chatly.Channels.GetAsync(channelId)`       | `GET /v1/channels/{id}`      |
-| `chatly.Billing.PlansAsync()`               | `GET /v1/billing/plans`      |
-| `chatly.Billing.UsageAsync(eventType, from?, to?)` | `GET /v1/billing/usage` |
-| `chatly.Workspace.SettingsAsync()`          | `GET /v1/workspace/settings` |
-| `chatly.Workspace.LabelsAsync()`            | `GET /v1/labels`             |
-| `chatly.Workspace.InboxesAsync()`           | `GET /v1/inboxes`            |
-| `chatly.Workspace.TeamMembersAsync(teamId)` | `GET /v1/teams/{id}/members` |
-| `chatly.Workspace.AgentSkillsAsync()`       | `GET /v1/agents/skills`      |
+| Method                                             | Route                        |
+| -------------------------------------------------- | ---------------------------- |
+| `chatly.Channels.ListAsync()`                      | `GET /v1/channels`           |
+| `chatly.Channels.GetAsync(channelId)`              | `GET /v1/channels/{id}`      |
+| `chatly.Billing.PlansAsync()`                      | `GET /v1/billing/plans`      |
+| `chatly.Billing.UsageAsync(eventType, from?, to?)` | `GET /v1/billing/usage`      |
+| `chatly.Workspace.SettingsAsync()`                 | `GET /v1/workspace/settings` |
+| `chatly.Workspace.LabelsAsync()`                   | `GET /v1/labels`             |
+| `chatly.Workspace.InboxesAsync()`                  | `GET /v1/inboxes`            |
+| `chatly.Workspace.TeamMembersAsync(teamId)`        | `GET /v1/teams/{id}/members` |
+| `chatly.Workspace.AgentSkillsAsync()`              | `GET /v1/agents/skills`      |
 
 ### Helpers, which make no HTTP call
 

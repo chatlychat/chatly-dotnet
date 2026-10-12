@@ -440,11 +440,28 @@ internal sealed class Transport : IDisposable
         string path,
         ListOptions? options,
         CancellationToken cancellationToken)
+        => WalkPagesAsync(
+            path,
+            cursor => ListOptions.QueryFor(
+                cursor is null ? options : (options ?? new ListOptions()) with { Cursor = cursor }),
+            cancellationToken);
+
+    /// <summary>
+    /// Walk every page of a route whose query parameters are its own.
+    /// </summary>
+    /// <remarks>
+    /// Three paged routes do not take <see cref="ListOptions"/> — the contact
+    /// journey, the unattended queue and search each declare their own
+    /// narrowing parameters — and they still need an auto-paginator. The
+    /// caller supplies a function from cursor to query, so the cursor is
+    /// threaded without this method knowing which options type produced it.
+    /// </remarks>
+    internal IAsyncEnumerable<JsonElement> WalkPagesAsync(
+        string path,
+        Func<string?, ChatlyQuery?> queryForCursor,
+        CancellationToken cancellationToken)
         => Pager.WalkAsync(
-            (cursor, token) => GetPageAsync(
-                path,
-                ListOptions.QueryFor(cursor is null ? options : (options ?? new ListOptions()) with { Cursor = cursor }),
-                token),
+            (cursor, token) => GetPageAsync(path, queryForCursor(cursor), token),
             cancellationToken);
 
     public void Dispose()

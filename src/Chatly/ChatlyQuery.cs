@@ -243,15 +243,53 @@ public sealed record EventsListOptions : ListOptions
 /// <summary>
 /// Options for <c>GET /v1/search</c>.
 /// </summary>
-public sealed record SearchOptions : ListOptions
+/// <remarks>
+/// Deliberately <b>not</b> a <see cref="ListOptions"/>. Search is paginated by
+/// <see cref="Cursor"/> and <see cref="Limit"/>, but it reads none of
+/// <c>filter[]</c>, <c>sort</c> or <c>fields</c> — its own schema declares the
+/// narrowing parameters below instead, and anything else is stripped. Offering
+/// three fields that are silently discarded is worse than not offering them:
+/// the caller gets a 200 and a wrong answer.
+/// </remarks>
+public sealed record SearchOptions
 {
     /// <summary>
     /// Which kinds of record to search, sent as repeated <c>kinds</c>
     /// parameters. Omit to search everything the key can read.
     /// </summary>
+    /// <remarks>
+    /// The accepted values are <c>contact</c>, <c>conversation</c>,
+    /// <c>message</c>, <c>ticket</c> and <c>kb</c>; anything else is a 400.
+    /// </remarks>
     public IReadOnlyList<string>? Kinds { get; init; }
 
-    /// <inheritdoc />
+    /// <summary>Only match records created at or after this instant.</summary>
+    public DateTimeOffset? From { get; init; }
+
+    /// <summary>Only match records created strictly before this instant.</summary>
+    public DateTimeOffset? To { get; init; }
+
+    /// <summary>Restrict to one channel.</summary>
+    public string? ChannelId { get; init; }
+
+    /// <summary>Restrict to conversations assigned to one agent.</summary>
+    public string? AssigneeUserId { get; init; }
+
+    /// <summary>Restrict to one status.</summary>
+    public string? Status { get; init; }
+
+    /// <summary>Page size, 1–100. The API defaults to 25.</summary>
+    public int? Limit { get; init; }
+
+    /// <summary>
+    /// The cursor from the previous page's <c>nextCursor</c>. Null for the
+    /// first page.
+    /// </summary>
+    public string? Cursor { get; init; }
+
+    /// <summary>Extra parameters appended after the ones above.</summary>
+    public ChatlyQuery? Extra { get; init; }
+
     /*
      * `kinds`, not `kinds[]`.
      *
@@ -263,7 +301,118 @@ public sealed record SearchOptions : ListOptions
      * The schema folds the bracketed spelling now, for clients already
      * published; the plain repeated key is what it declares.
      */
-    protected internal override ChatlyQuery ToQuery() => base.ToQuery().AddEach("kinds", Kinds);
+    internal ChatlyQuery ToQuery()
+        => new ChatlyQuery()
+            .AddEach("kinds", Kinds)
+            .Add("from", Iso(From))
+            .Add("to", Iso(To))
+            .Add("channelId", ChannelId)
+            .Add("assigneeUserId", AssigneeUserId)
+            .Add("status", Status)
+            .Add("limit", Limit)
+            .Add("cursor", Cursor)
+            .AddRange(Extra);
+
+    internal static string? Iso(DateTimeOffset? value)
+        => value?.ToUniversalTime().ToString("o", CultureInfo.InvariantCulture);
+}
+
+/// <summary>
+/// Options for <c>GET /v1/contacts/{id}/journey</c>.
+/// </summary>
+/// <remarks>
+/// A contact's timeline is cursor-paginated like any list, but its parameters
+/// are its own: a lookback window, a page size and a cursor.
+/// </remarks>
+public sealed record JourneyOptions
+{
+    /// <summary>
+    /// How far back to look, in days: 1–365, and the API defaults to 90.
+    /// </summary>
+    /// <remarks>
+    /// This bounds the whole walk, not one page. A timeline older than the
+    /// window is not reachable by paging further.
+    /// </remarks>
+    public int? Days { get; init; }
+
+    /// <summary>Page size, 1–100. The API defaults to 25.</summary>
+    public int? Limit { get; init; }
+
+    /// <summary>
+    /// The cursor from the previous page's <c>nextCursor</c>.
+    /// </summary>
+    /// <remarks>
+    /// <b>This one is an ISO-8601 instant</b> rather than the opaque token the
+    /// other routes use — the timeline merges five sources and pages by time,
+    /// so the server hands back the timestamp it stopped at. It is still a
+    /// cursor: pass back what the previous page returned, and never build one.
+    /// A hand-made instant silently skips or repeats whatever shares that
+    /// moment across the five sources.
+    /// </remarks>
+    public string? Cursor { get; init; }
+
+    /// <summary>Extra parameters appended after the ones above.</summary>
+    public ChatlyQuery? Extra { get; init; }
+
+    /// <summary>Render these options as query parameters.</summary>
+    internal ChatlyQuery ToQuery()
+        => new ChatlyQuery()
+            .Add("days", Days)
+            .Add("limit", Limit)
+            .Add("cursor", Cursor)
+            .AddRange(Extra);
+}
+
+/// <summary>
+/// Options for <c>GET /v1/conversations/unattended</c>.
+/// </summary>
+/// <remarks>
+/// The triage queue's own narrowing parameters. Note the wire names are
+/// <c>assignee</c>, <c>team</c> and <c>channel</c> — short, and not the
+/// <c>…UserId</c> / <c>…Type</c> spellings used elsewhere.
+/// </remarks>
+public sealed record UnattendedOptions
+{
+    /// <summary>
+    /// Only threads assigned to this agent, or <c>"unassigned"</c> for
+    /// nobody's.
+    /// </summary>
+    public string? Assignee { get; init; }
+
+    /// <summary>Only threads owned by this team.</summary>
+    public string? Team { get; init; }
+
+    /// <summary>Only threads on this channel type, e.g. <c>web</c>.</summary>
+    public string? Channel { get; init; }
+
+    /// <summary>
+    /// Only threads waiting longer than this many minutes.
+    /// </summary>
+    /// <remarks>
+    /// Measured from the conversation's creation — when the customer's first
+    /// message landed — because that is the clock they are experiencing.
+    /// </remarks>
+    public int? OlderThanMinutes { get; init; }
+
+    /// <summary>Page size. The API clamps it.</summary>
+    public int? Limit { get; init; }
+
+    /// <summary>The cursor from the previous page's <c>nextCursor</c>.</summary>
+    public string? Cursor { get; init; }
+
+    /// <summary>Extra parameters appended after the ones above.</summary>
+    public ChatlyQuery? Extra { get; init; }
+
+    /// <summary>Render these options as query parameters.</summary>
+    internal ChatlyQuery ToQuery()
+        => new ChatlyQuery()
+            .Add("assignee", Assignee)
+            .Add("team", Team)
+            .Add("channel", Channel)
+            .Add("olderThanMinutes", OlderThanMinutes)
+            .Add("limit", Limit)
+            .Add("cursor", Cursor)
+            .AddRange(Extra);
 }
 
 /// <summary>

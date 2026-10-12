@@ -79,13 +79,13 @@ public static class SurfaceChecks
         new SurfaceEntry("contacts.add_tags", "POST", "/v1/contacts/c_1/tags", (c, t) => c.Contacts.AddTagsAsync("c_1", "vip", t)),
         new SurfaceEntry("contacts.remove_tag", "DELETE", "/v1/contacts/c_1/tags/vip", (c, t) => c.Contacts.RemoveTagAsync("c_1", "vip", t)),
         new SurfaceEntry("contacts.unsubscribe", "POST", "/v1/contacts/c_1/unsubscribe", (c, t) => c.Contacts.UnsubscribeAsync("c_1", true, null, t)),
-        new SurfaceEntry("contacts.journey", "GET", "/v1/contacts/c_1/journey", (c, t) => c.Contacts.JourneyAsync("c_1", t)),
+        new SurfaceEntry("contacts.journey", "GET", "/v1/contacts/c_1/journey", (c, t) => c.Contacts.JourneyAsync("c_1", t), ResponseShape.Page),
 
         new SurfaceEntry("conversations.list", "GET", "/v1/conversations", (c, t) => c.Conversations.ListAsync(t), ResponseShape.Page),
         new SurfaceEntry("conversations.get", "GET", "/v1/conversations/k_1", (c, t) => c.Conversations.GetAsync("k_1", t)),
         new SurfaceEntry("conversations.messages", "GET", "/v1/conversations/k_1/messages", (c, t) => c.Conversations.MessagesAsync("k_1", t), ResponseShape.Page),
         new SurfaceEntry("conversations.send", "POST", "/v1/conversations/k_1/messages", (c, t) => c.Conversations.SendAsync("k_1", new MessageInput { Body = "hi" }, t)),
-        new SurfaceEntry("conversations.unattended", "GET", "/v1/conversations/unattended", (c, t) => c.Conversations.UnattendedAsync(t)),
+        new SurfaceEntry("conversations.unattended", "GET", "/v1/conversations/unattended", (c, t) => c.Conversations.UnattendedAsync(t), ResponseShape.Page),
         new SurfaceEntry("conversations.agent_handling", "GET", "/v1/conversations/k_1/agent-handling", (c, t) => c.Conversations.AgentHandlingAsync("k_1", t)),
         new SurfaceEntry("conversations.set_agent_handling", "PUT", "/v1/conversations/k_1/agent-handling", (c, t) => c.Conversations.SetAgentHandlingAsync("k_1", new { handledBy = "ai" }, t)),
         new SurfaceEntry("conversations.generated_replies", "GET", "/v1/conversations/k_1/generated-replies", (c, t) => c.Conversations.GeneratedRepliesAsync("k_1", t)),
@@ -111,7 +111,7 @@ public static class SurfaceChecks
         new SurfaceEntry("kb.article", "GET", "/v1/kb/articles/getting-started", (c, t) => c.Kb.ArticleAsync("getting-started", t)),
         new SurfaceEntry("kb.collections", "GET", "/v1/kb/collections", (c, t) => c.Kb.CollectionsAsync(t)),
 
-        new SurfaceEntry("search.query", "GET", "/v1/search", (c, t) => c.Search.QueryAsync("refund", t)),
+        new SurfaceEntry("search.query", "GET", "/v1/search", (c, t) => c.Search.QueryAsync("refund", t), ResponseShape.Page),
 
         new SurfaceEntry("events.track", "POST", "/v1/cdp/events", (c, t) => c.Events.TrackAsync("c_1", "trial_started", null, t)),
         new SurfaceEntry("events.list", "GET", "/v1/cdp/events", (c, t) => c.Events.ListAsync(t), ResponseShape.Page),
@@ -205,14 +205,30 @@ public static class SurfaceChecks
             }
         }
 
-        // Anti-vacuity floor. SEVEN paged entries, not eight: `macros.list`
-        // left the set when the manifest was corrected, because that handler is
-        // @PaginationExempt and returns a bare array capped at 200 rows by
-        // usage rank, so there is no cursor to follow.
+        /*
+         * Anti-vacuity floor. TEN, and it has been 8 and 7 — the manifest's
+         * `paged` flag was wrong in both directions, which is why this
+         * asserts the number at all.
+         *
+         * 8 -> 7: `macros.list` left, because its handler is
+         * @PaginationExempt and answers a bare array capped at 200 rows by
+         * usage rank. There was never a cursor to follow.
+         *
+         * 7 -> 10: `contacts.journey`, `conversations.unattended` and
+         * `search.query` went in. All three answer real
+         * `{ items, nextCursor }` envelopes — `unattended` carries a `total`
+         * beside them and `search` carries `tier` and `facets` — and none had
+         * been flagged.
+         *
+         * Both moves came from reading the handlers. Neither was a parser
+         * dropping rows, which is the other reason this count changes and the
+         * only one that is a bug. Check that surface.json parses before
+         * believing the next move.
+         */
         Expect.Equal(
-            7,
+            10,
             pagedInManifest,
-            "the manifest marks 7 entries paged (macros.list is not one: @PaginationExempt, bare array)");
+            "the manifest marks 10 entries paged (macros.list is not one: @PaginationExempt, bare array)");
 
         // And the one route known to answer a bare array is declared as one.
         Expect.Equal(

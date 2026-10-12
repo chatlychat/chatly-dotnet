@@ -48,7 +48,12 @@ public sealed class SearchResource
             throw new ArgumentException("Search query cannot be empty.", nameof(query));
         }
 
-        var parameters = new ChatlyQuery().Add("q", query).AddRange(ListOptions.QueryFor(options));
+        // `SearchOptions` is NOT a `ListOptions` — the search route reads
+        // neither `filter[]`, `sort` nor `fields`, so it has its own
+        // `ToQuery()` and `ListOptions.QueryFor` does not accept it.
+        var parameters = new ChatlyQuery()
+            .Add("q", query)
+            .AddRange(options?.ToQuery() ?? new ChatlyQuery());
         return _transport.GetJsonAsync(Path, parameters, cancellationToken);
     }
 

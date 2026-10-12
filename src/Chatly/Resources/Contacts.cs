@@ -209,15 +209,69 @@ public sealed class ContactsResource
             cancellationToken);
 
     /// <summary>
-    /// What this person has done: conversations, events, tickets, in order.
+    /// One page of what this person has done — CDP events, conversations,
+    /// messages, tickets and surveys merged into one timeline, newest first.
+    /// <c>GET /v1/contacts/{id}/journey</c>.
+    /// </summary>
+    /// <remarks>
+    /// This route is cursor-paginated, and its cursor is an ISO-8601 instant
+    /// rather than an opaque token. Pass <see cref="Page{T}.NextCursor"/>
+    /// straight back through <see cref="JourneyOptions.Cursor"/>, or let
+    /// <see cref="JourneyAllAsync(string, CancellationToken)"/> do it; never
+    /// construct one by hand.
+    /// </remarks>
+    /// <param name="contactId">The contact.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The first page of the timeline.</returns>
+    public Task<Page<JsonElement>> JourneyAsync(
+        string contactId,
+        CancellationToken cancellationToken = default)
+        => JourneyAsync(contactId, null, cancellationToken);
+
+    /// <summary>
+    /// One page of the timeline, with a lookback window and page size.
     /// <c>GET /v1/contacts/{id}/journey</c>.
     /// </summary>
     /// <param name="contactId">The contact.</param>
+    /// <param name="options">Lookback days, page size, cursor.</param>
     /// <param name="cancellationToken">Cancels the request.</param>
-    /// <returns>The journey timeline.</returns>
-    public Task<JsonElement> JourneyAsync(string contactId, CancellationToken cancellationToken = default)
-        => _transport.GetJsonAsync(
-            $"{Collection}/{Route.Segment(contactId, nameof(contactId))}/journey",
-            null,
+    /// <returns>The requested page of the timeline.</returns>
+    public Task<Page<JsonElement>> JourneyAsync(
+        string contactId,
+        JourneyOptions? options,
+        CancellationToken cancellationToken = default)
+        => _transport.GetPageAsync(JourneyPath(contactId), options?.ToQuery(), cancellationToken);
+
+    /// <summary>
+    /// The whole timeline within the lookback window, page by page.
+    /// </summary>
+    /// <remarks>
+    /// Bounded by <see cref="JourneyOptions.Days"/> (90 by default), not by
+    /// the cursor: paging further does not reach past the window.
+    /// </remarks>
+    /// <param name="contactId">The contact.</param>
+    /// <param name="cancellationToken">Stops the walk.</param>
+    /// <returns>An async stream of timeline entries.</returns>
+    public IAsyncEnumerable<JsonElement> JourneyAllAsync(
+        string contactId,
+        CancellationToken cancellationToken = default)
+        => JourneyAllAsync(contactId, null, cancellationToken);
+
+    /// <summary>The whole timeline matching the options, page by page.</summary>
+    /// <param name="contactId">The contact.</param>
+    /// <param name="options">Lookback days, page size, starting cursor.</param>
+    /// <param name="cancellationToken">Stops the walk.</param>
+    /// <returns>An async stream of timeline entries.</returns>
+    public IAsyncEnumerable<JsonElement> JourneyAllAsync(
+        string contactId,
+        JourneyOptions? options,
+        CancellationToken cancellationToken = default)
+        => _transport.WalkPagesAsync(
+            JourneyPath(contactId),
+            cursor => (cursor is null ? options ?? new JourneyOptions() : (options ?? new JourneyOptions()) with { Cursor = cursor })
+                .ToQuery(),
             cancellationToken);
+
+    private static string JourneyPath(string contactId)
+        => $"{Collection}/{Route.Segment(contactId, nameof(contactId))}/journey";
 }
