@@ -1,0 +1,65 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    TargetFramework: net8.0 ONLY, and netstandard2.1 deliberately NOT added.
+
+    The brief asked for netstandard2.1 "if it costs nothing". It costs a
+    runtime dependency: `System.Text.Json` and `System.Net.Http.Json` are not
+    part of netstandard2.1 — they are NuGet packages there — and
+    `System.Security.Cryptography.CryptographicOperations.FixedTimeEquals`
+    and `Convert.ToHexString` are not in that surface either. A netstandard2.1
+    target therefore means either shipping NuGet dependencies (which the
+    contract's §9 forbids: "a customer should not inherit our dependency tree
+    to send a message") or hand-rolling a JSON parser and a constant-time
+    compare. Both are worse than not shipping the target. net8.0 is in
+    support until November 2026 and a net8.0 assembly loads on net9/net10.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>latest</AnalysisLevel>
+    <!--
+      With TreatWarningsAsErrors on, this makes CS1591 ("missing XML comment
+      for publicly visible type or member") a build error. That is the point:
+      the XML doc comments on the public surface are enforced by the compiler
+      rather than by review.
+    -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <RootNamespace>Chatly</RootNamespace>
+    <AssemblyName>Chatly</AssemblyName>
+    <Deterministic>true</Deterministic>
+    <EnableTrimAnalyzer>false</EnableTrimAnalyzer>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <PackageId>Chatly</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>Chatly</Authors>
+    <Company>Chatly</Company>
+    <Product>Chatly .NET SDK</Product>
+    <Title>Chatly .NET SDK</Title>
+    <Description>Server-side .NET client for the Chatly live-chat and customer-messaging API. Authenticates with a workspace API key, so it belongs in your backend and never in a browser. Dependency-free: HttpClient, System.Text.Json and System.Security.Cryptography only. Includes typed errors, automatic retries with idempotency keys, IAsyncEnumerable auto-pagination, webhook signature verification and widget identity hashing.</Description>
+    <PackageProjectUrl>https://chatlychat.com</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/chatlychat/chatly</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseFile>LICENSE</PackageLicenseFile>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageTags>chatly;chat;livechat;messaging;support;helpdesk;webhooks;sdk;api-client</PackageTags>
+    <PackageReleaseNotes>First release. See CHANGELOG.md.</PackageReleaseNotes>
+    <Copyright>Copyright (c) 2026 Chatly Engineering</Copyright>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="../../LICENSE" Pack="true" PackagePath="/" Visible="false" />
+    <None Include="../../README.md" Pack="true" PackagePath="/" Visible="false" />
+    <None Include="../../CHANGELOG.md" Pack="true" PackagePath="/" Visible="false" />
+  </ItemGroup>
+
+</Project>

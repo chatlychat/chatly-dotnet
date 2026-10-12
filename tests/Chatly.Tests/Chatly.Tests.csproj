@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    TargetFramework net10.0, while the library targets net8.0.
+
+    The library is the shipped artifact and it is net8.0. This project runs on
+    whatever runtime the machine has: only the 10.0 runtime is installed here,
+    and `dotnet test` against a net8.0 test project would need the 8.0 runtime
+    to launch the test host. A net10.0 test project referencing the net8.0
+    library exercises exactly the assembly that ships, on a newer runtime —
+    which is what every consumer on .NET 9 or 10 is doing anyway.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>Chatly.Tests</AssemblyName>
+    <RootNamespace>Chatly.Tests</RootNamespace>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Chatly/Chatly.csproj" />
+  </ItemGroup>
+
+  <!--
+    The checks are compiled into this project AND into tests/Verify, so the
+    two runners cannot drift. They depend on nothing but the SDK and the BCL.
+  -->
+  <ItemGroup>
+    <Compile Include="../Checks/*.cs" LinkBase="Checks" />
+  </ItemGroup>
+
+</Project>
