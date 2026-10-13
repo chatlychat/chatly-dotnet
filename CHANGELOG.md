@@ -23,12 +23,24 @@ First release.
   `Idempotency-Key`.
 - Idempotency: a fresh UUID per write, and `WithIdempotencyKey(key)` to pin one
   across writes for retrying the same logical operation.
-- Auto-pagination as `IAsyncEnumerable<JsonElement>` on the seven paged routes
-  (`ListAllAsync` and friends), stopping on a null cursor and on a repeated
-  one. `GET /v1/macros` is deliberately not among them: it is
+- Auto-pagination as `IAsyncEnumerable<JsonElement>` on **all ten** paged
+  routes (`ListAllAsync` and friends), stopping on a null cursor and on a
+  repeated one. This read "the seven paged routes" and shipped with seven:
+  `Contacts.JourneyAllAsync` existed but was left out of the suite's walker
+  map, and `Conversations.UnattendedAllAsync` and `Search.QueryAllAsync` did
+  not exist at all, so two routes the manifest marks `paged` had no walker —
+  and `UnattendedAsync` was documented as "not cursor-paginated", which it is.
+  `GET /v1/macros` is deliberately still not among them: it is
   pagination-exempt and answers a bare JSON array capped at 200 rows by usage
   rank, so `Macros.ListAsync` returns that array and there is no
   `Macros.ListAllAsync`.
+- `surface.lock.json` records the top-level response shape this SDK's decoder
+  expects per route — `array`, `page`, `object` or `empty` — declared by hand
+  in `tests/Checks/SurfaceChecks.cs` and diffed against
+  `packages/sdk-spec/surface.json` by
+  `scripts/check-sdk-surface-parity.mjs`. Thirteen bare-array routes had been
+  declared `object` because `ResponseShape.Object` was the constructor
+  default; the argument is required now.
 - `Billing.UsageAsync(eventType, from?, to?)` takes the event type as a
   required argument, with `ChatlyUsageEventTypes` for the four values the API
   accepts. The endpoint validates it against a closed list and 400s without

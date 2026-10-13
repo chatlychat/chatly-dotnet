@@ -135,7 +135,8 @@ an upsert only touches the fields you set.
 | `AddTagsAsync(contactId, tag)`                              | `POST /v1/contacts/{id}/tags`         |
 | `RemoveTagAsync(contactId, tag)`                            | `DELETE /v1/contacts/{id}/tags/{tag}` |
 | `UnsubscribeAsync(contactId, unsubscribed = true, reason?)` | `POST /v1/contacts/{id}/unsubscribe`  |
-| `JourneyAsync(contactId)`                                   | `GET /v1/contacts/{id}/journey`       |
+| `JourneyAsync(contactId, options?)`                         | `GET /v1/contacts/{id}/journey`       |
+| `JourneyAllAsync(contactId, options?)`                      | auto-paginates the above              |
 
 `UpsertAsync` keys on `ExternalId`, so calling it twice with the same one
 updates a single record. `BulkUpsertAsync` takes up to 5000 rows per call and
@@ -151,7 +152,8 @@ reports per-row outcomes instead of failing the batch on one bad row.
 | `MessagesAsync(conversationId, options?)`       | `GET /v1/conversations/{id}/messages`              |
 | `MessagesAllAsync(conversationId, options?)`    | auto-paginates the above                           |
 | `SendAsync(conversationId, message)`            | `POST /v1/conversations/{id}/messages`             |
-| `UnattendedAsync()`                             | `GET /v1/conversations/unattended`                 |
+| `UnattendedAsync(options?)`                     | `GET /v1/conversations/unattended`                 |
+| `UnattendedAllAsync(options?)`                  | auto-paginates the above                           |
 | `AgentHandlingAsync(conversationId)`            | `GET /v1/conversations/{id}/agent-handling`        |
 | `SetAgentHandlingAsync(conversationId, state)`  | `PUT /v1/conversations/{id}/agent-handling`        |
 | `GeneratedRepliesAsync(conversationId)`         | `GET /v1/conversations/{id}/generated-replies`     |
@@ -159,6 +161,13 @@ reports per-row outcomes instead of failing the batch on one bad row.
 | `ScheduledMessagesAsync(conversationId)`        | `GET /v1/conversations/{id}/scheduled-messages`    |
 | `ScheduleMessageAsync(conversationId, request)` | `POST /v1/conversations/{id}/scheduled-messages`   |
 | `CancelScheduledAsync(scheduledMessageId)`      | `DELETE /v1/conversations/scheduled-messages/{id}` |
+
+`UnattendedAsync` is cursor-paginated, despite reading like a bounded
+operational list — it answers `{ items, nextCursor, total }`, and `total`
+ignores the cursor, which is why the single-page form hands back the whole
+envelope rather than just the threads. `UnattendedAllAsync` walks it.
+`CancelScheduledAsync` answers **200 with the row it cancelled**, not 204; the
+only route on this surface that really answers 204 is `Macros.DeleteAsync`.
 
 A message sent with an API key is recorded as sent by an integration, not by
 whoever created the key — a key outlives the person who issued it, so
@@ -213,10 +222,16 @@ parameters the route actually reads.
 
 ### Search — `chatly.Search`
 
-| Method                        | Route                     |
-| ----------------------------- | ------------------------- |
-| `QueryAsync(query, options?)` | `GET /v1/search`          |
-| `KbAsync(query)`              | `GET /v1/search?kinds=kb` |
+| Method                           | Route                     |
+| -------------------------------- | ------------------------- |
+| `QueryAsync(query, options?)`    | `GET /v1/search`          |
+| `QueryAllAsync(query, options?)` | auto-paginates the above  |
+| `KbAsync(query)`                 | `GET /v1/search?kinds=kb` |
+
+`QueryAsync` returns the whole envelope, not just the hits: `tier` and `facets`
+sit beside `items` and a caller that only ever saw matches would lose both.
+`QueryAllAsync` yields the hits alone, which is the right trade for a loop —
+read the facets from a single page.
 
 ### Events (CDP) — `chatly.Events`
 

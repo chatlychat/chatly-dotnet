@@ -10,8 +10,10 @@ using System.Threading.Tasks;
 namespace Chatly.Tests;
 
 /// <summary>
-/// The nine items CONTRACT.md §10 requires of every Chatly backend SDK, plus
-/// the cases that caused real incidents in sibling SDKs.
+/// Items 1-9 of the ten CONTRACT.md §10 requires of every Chatly backend SDK,
+/// plus the cases that caused real incidents in sibling SDKs. Item 10, the
+/// response-shape lock, lives in <see cref="SurfaceChecks"/> instead, because
+/// that is the file which writes surface.lock.json.
 /// </summary>
 public static class ContractChecks
 {

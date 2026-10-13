@@ -27,9 +27,43 @@ public sealed class ManifestEntry
     /// </remarks>
     public bool Paged { get; set; }
 
+    /// <summary>
+    /// The manifest's own name for the route's top-level response shape:
+    /// <c>array</c>, <c>page</c>, <c>object</c> or <c>empty</c>.
+    /// </summary>
+    /// <remarks>
+    /// Read here so the declared column in <see cref="SurfaceChecks.Entries"/>
+    /// can be diffed against it. It is NOT read to build the fake's fixtures —
+    /// a fake fed from the manifest agrees with whatever the manifest says,
+    /// including when it is wrong, which is exactly how <c>macros.list</c>
+    /// passed this suite and failed against the real API.
+    /// </remarks>
+    public string Shape { get; set; } = string.Empty;
+
     public string Key => Ns + "." + Name;
 
-    public string Line => Http + " " + Path;
+    /// <summary>
+    /// The comparable value for one route: verb, path <i>and</i> the response
+    /// shape, in the spelling <c>scripts/check-sdk-surface-parity.mjs</c>
+    /// uses.
+    /// </summary>
+    /// <remarks>
+    /// The shape is in here rather than compared separately so a wrong shape
+    /// reads as the same class of failure as a wrong verb — because it is one.
+    /// </remarks>
+    public string Line => Http + " " + Path + " → " + Shape;
+
+    /// <summary>The <see cref="ResponseShape"/> this entry's <see cref="Shape"/> names.</summary>
+    /// <exception cref="CheckFailedException">The manifest's spelling is not one of the four.</exception>
+    public ResponseShape ResponseShape => Shape switch
+    {
+        "array" => Chatly.Tests.ResponseShape.Array,
+        "page" => Chatly.Tests.ResponseShape.Page,
+        "object" => Chatly.Tests.ResponseShape.Object,
+        "empty" => Chatly.Tests.ResponseShape.Empty,
+        _ => throw new CheckFailedException(
+            $"{Key}: the manifest's shape <{Shape}> is not one of array, page, object, empty"),
+    };
 }
 
 /// <summary>
@@ -98,10 +132,29 @@ public static class Manifest
                 Path = element.GetProperty("path").GetString() ?? string.Empty,
                 Paged = element.TryGetProperty("paged", out var paged)
                     && paged.ValueKind == JsonValueKind.True,
+
+                // Required, not optional. A manifest entry with no shape
+                // cannot be compared against, and a check that passes when
+                // it cannot compare is the failure mode this whole file is
+                // written against.
+                Shape = element.TryGetProperty("shape", out var shape)
+                    && shape.ValueKind == JsonValueKind.String
+                        ? shape.GetString() ?? string.Empty
+                        : throw new CheckFailedException(
+                            $"the manifest entry {element.GetProperty("ns").GetString()}."
+                            + $"{element.GetProperty("name").GetString()} carries no `shape` "
+                            + "string — see `$shapeMeans` in surface.json"),
             });
         }
 
         Expect.True(entries.Count > 0, "the manifest lists at least one entry");
+
+        // Every entry's shape parses, before anything is compared to it.
+        foreach (var entry in entries)
+        {
+            _ = entry.ResponseShape;
+        }
+
         return entries;
     }
 

@@ -18,6 +18,8 @@ public sealed class ConversationsResource
 {
     private const string Collection = "/v1/conversations";
 
+    private const string UnattendedPath = Collection + "/unattended";
+
     private readonly Transport _transport;
 
     internal ConversationsResource(Transport transport) => _transport = transport;
@@ -143,16 +145,74 @@ public sealed class ConversationsResource
             cancellationToken);
 
     /// <summary>
-    /// Threads nobody has answered. <c>GET /v1/conversations/unattended</c>.
+    /// One page of threads nobody has answered.
+    /// <c>GET /v1/conversations/unattended</c>.
     /// </summary>
     /// <remarks>
-    /// Not cursor-paginated — it is a bounded operational list, not a feed, so
-    /// it comes back whole.
+    /// <para>
+    /// <b>This route IS cursor-paginated.</b> It reads <c>cursor</c> and
+    /// <c>limit</c> and answers <c>{ items, nextCursor, total }</c>; the
+    /// remarks here used to say it was "a bounded operational list, not a
+    /// feed, so it comes back whole", and a caller who believed that processed
+    /// the first page of a triage queue and thought it had seen all of it.
+    /// Use <see cref="UnattendedAllAsync(CancellationToken)"/> to walk it.
+    /// </para>
+    /// <para>
+    /// The whole envelope is returned rather than just <c>items</c>, because
+    /// <c>total</c> sits beside them and ignores the cursor — it is the badge
+    /// number, and a caller that only ever saw the hits would lose it.
+    /// </para>
     /// </remarks>
     /// <param name="cancellationToken">Cancels the request.</param>
-    /// <returns>The unattended threads.</returns>
+    /// <returns>
+    /// The first page: <c>items</c>, <c>nextCursor</c> and <c>total</c>.
+    /// </returns>
     public Task<JsonElement> UnattendedAsync(CancellationToken cancellationToken = default)
-        => _transport.GetJsonAsync($"{Collection}/unattended", null, cancellationToken);
+        => UnattendedAsync(null, cancellationToken);
+
+    /// <summary>
+    /// One page of unattended threads, narrowed.
+    /// <c>GET /v1/conversations/unattended</c>.
+    /// </summary>
+    /// <remarks>
+    /// The wire names are <c>assignee</c>, <c>team</c> and <c>channel</c> —
+    /// see <see cref="UnattendedOptions"/>, which until now no method accepted.
+    /// </remarks>
+    /// <param name="options">Assignee, team, channel, wait time, page size, cursor.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The requested page.</returns>
+    public Task<JsonElement> UnattendedAsync(
+        UnattendedOptions? options,
+        CancellationToken cancellationToken = default)
+        => _transport.GetJsonAsync(UnattendedPath, options?.ToQuery(), cancellationToken);
+
+    /// <summary>
+    /// Every unattended thread, page by page.
+    /// </summary>
+    /// <remarks>
+    /// Yields the threads alone. If you need the queue's <c>total</c>, read it
+    /// from <see cref="UnattendedAsync(CancellationToken)"/> — it is a
+    /// property of the queue, not of an item.
+    /// </remarks>
+    /// <param name="cancellationToken">Stops the walk.</param>
+    /// <returns>An async stream of unattended conversations.</returns>
+    public IAsyncEnumerable<JsonElement> UnattendedAllAsync(CancellationToken cancellationToken = default)
+        => UnattendedAllAsync(null, cancellationToken);
+
+    /// <summary>Every unattended thread matching the options, page by page.</summary>
+    /// <param name="options">Assignee, team, channel, wait time, page size, starting cursor.</param>
+    /// <param name="cancellationToken">Stops the walk.</param>
+    /// <returns>An async stream of unattended conversations.</returns>
+    public IAsyncEnumerable<JsonElement> UnattendedAllAsync(
+        UnattendedOptions? options,
+        CancellationToken cancellationToken = default)
+        => _transport.WalkPagesAsync(
+            UnattendedPath,
+            cursor => (cursor is null
+                    ? options ?? new UnattendedOptions()
+                    : (options ?? new UnattendedOptions()) with { Cursor = cursor })
+                .ToQuery(),
+            cancellationToken);
 
     /// <summary>
     /// Who is handling this thread — a human, or an AI agent.
@@ -276,7 +336,12 @@ public sealed class ConversationsResource
     /// <param name="scheduledMessageId">The id from the scheduling response.</param>
     /// <param name="cancellationToken">Cancels the request.</param>
     /// <returns>
-    /// The API's response, which is JSON null when it answers 204.
+    /// The row it just cancelled. This route answers <b>200 with a body</b>,
+    /// not 204 — <c>@ZodResponse(scheduledMessageSchema)</c> — so a caller can
+    /// show what it called off. The only real 204 on this surface is
+    /// <c>DELETE /v1/macros/{id}</c>; this doc comment used to claim this was
+    /// one too, and the Node client acted on that belief by typing the method
+    /// <c>void</c> and throwing the body away.
     /// </returns>
     public Task<JsonElement> CancelScheduledAsync(
         string scheduledMessageId,

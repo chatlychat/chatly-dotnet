@@ -26,9 +26,22 @@ public sealed class SurfaceLockEntry
 
     public string Path { get; set; } = string.Empty;
 
+    /// <summary>
+    /// The top-level response shape this SDK's decoder expects from the
+    /// route: <c>array</c>, <c>page</c>, <c>object</c> or <c>empty</c>.
+    /// </summary>
+    /// <remarks>
+    /// Declared by hand in <see cref="SurfaceChecks.Entries"/> and written
+    /// here, so <c>scripts/check-sdk-surface-parity.mjs</c> can diff eight
+    /// independently written columns against the manifest. Deliberately not
+    /// copied from the manifest: a lock that echoes the contract back agrees
+    /// with it even when the contract is wrong.
+    /// </remarks>
+    public string Shape { get; set; } = string.Empty;
+
     public string Key => Ns + "." + Name;
 
-    public string Line => $"{Http} {Path}";
+    public string Line => $"{Http} {Path} → {Shape}";
 }
 
 /// <summary>
@@ -101,7 +114,7 @@ public static class SurfaceLock
             // for everything, which is what hid the macros decode failure.
             var handler = new FakeHandler(FakeResponse.For(invocation.Shape));
             using var client = Fake.Client(handler);
-            await invocation.Invoke(client, CancellationToken.None);
+            var value = await invocation.Invoke(client, CancellationToken.None);
 
             Expect.Equal(1, handler.CallCount, $"{entry.Key} issued exactly one request");
             Expect.Equal(
@@ -109,12 +122,20 @@ public static class SurfaceLock
                 handler.Last.Uri.GetLeftPart(UriPartial.Authority),
                 $"{entry.Key} went to the production host");
 
+            // The locked shape is evidence, not an aspiration: the method was
+            // just fed a body of that shape and handed one back.
+            Expect.Equal(
+                Shapes.Name(invocation.Shape),
+                Shapes.Of(value),
+                $"{entry.Key} decoded to the shape this package declares for it");
+
             observed.Add(new SurfaceLockEntry
             {
                 Ns = entry.Ns,
                 Name = entry.Name,
                 Http = handler.Last.Verb,
                 Path = Templatise(handler.Last.Uri.AbsolutePath, entry.Path, entry.Key),
+                Shape = Shapes.Name(invocation.Shape),
             });
         }
 
@@ -139,7 +160,8 @@ public static class SurfaceLock
             Expect.Equal(
                 expected[i].Line,
                 lockEntries[i].Line,
-                $"{expected[i].Key}: the request the method actually issued");
+                $"{expected[i].Key}: the request the method actually issued, and the response "
+                + "shape its decoder expects");
         }
     }
 
@@ -177,12 +199,16 @@ public static class SurfaceLock
         {
             ["sdk"] = "dotnet",
             ["generatedBy"] = "tests/Checks/SurfaceLock.cs",
+            // Key order is insertion order: ns, name, http, path, shape. The
+            // lock is in .prettierignore, so this generator owns its bytes
+            // and nothing reformats them behind it.
             ["entries"] = entries.Select(entry => new Dictionary<string, string>
             {
                 ["ns"] = entry.Ns,
                 ["name"] = entry.Name,
                 ["http"] = entry.Http,
                 ["path"] = entry.Path,
+                ["shape"] = entry.Shape,
             }).ToList(),
         };
 
