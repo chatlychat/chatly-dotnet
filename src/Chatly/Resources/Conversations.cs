@@ -364,4 +364,208 @@ public sealed class ConversationsResource
 
     private static string ScheduledPath(string conversationId)
         => $"{Collection}/{Route.Segment(conversationId, nameof(conversationId))}/scheduled-messages";
+
+    /// <summary>
+    /// Conversations merged into or out of this one.
+    /// <c>GET /v1/conversations/{id}/linked</c>.
+    /// </summary>
+    /// <remarks>
+    /// <b>An object with an <c>items</c> key and no cursor</b> — it looks
+    /// like a page and is not one, which is why there is no walker here. The
+    /// set is bounded by how many times a thread has been merged. Each row's
+    /// <c>relation</c> says which direction the merge went:
+    /// <c>merged_into</c> or <c>merged_from</c>.
+    /// </remarks>
+    /// <param name="conversationId">The conversation.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns><c>{ items: [...] }</c>.</returns>
+    public Task<JsonElement> LinkedAsync(
+        string conversationId,
+        CancellationToken cancellationToken = default)
+        => _transport.GetJsonAsync(
+            $"{Collection}/{Route.Segment(conversationId, nameof(conversationId))}/linked",
+            null,
+            cancellationToken);
+
+    /// <summary>
+    /// The outcomes recorded on one conversation.
+    /// <c>GET /v1/conversations/{id}/outcomes</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Newest first, and merged from three places — AI resolutions,
+    /// escalations and outcomes reported through
+    /// <see cref="RecordOutcomeAsync(string, object, CancellationToken)"/> —
+    /// so a row's shape varies with where it came from. An object with an
+    /// <c>items</c> key, not a page.
+    /// </para>
+    /// <para>
+    /// <b>Needs <c>conversations:read</c>, which the route does not
+    /// declare.</b> It carries no <c>@RequirePermission</c> of its own and
+    /// resolves the conversation before reading outcomes, so a key without
+    /// that scope gets a <b>404 on every conversation</b> rather than a 403 —
+    /// which reads as "no such thread" and sends you looking for the wrong
+    /// bug. Check your key with
+    /// <see cref="ChatlyClient.WhoAmIAsync(CancellationToken)"/> first.
+    /// </para>
+    /// </remarks>
+    /// <param name="conversationId">The conversation.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns><c>{ items: [...] }</c>, newest first.</returns>
+    public Task<JsonElement> OutcomesAsync(
+        string conversationId,
+        CancellationToken cancellationToken = default)
+        => _transport.GetJsonAsync(
+            OutcomesPath(conversationId),
+            null,
+            cancellationToken);
+
+    /// <summary>
+    /// Report an outcome on a conversation — resolved, escalated or
+    /// purchased. <c>POST /v1/conversations/{id}/outcomes</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is how an integration closes the attribution loop: if the thread
+    /// ended in a sale or a deflection your own systems know about, record it
+    /// here and it appears in the attribution and resolution reports.
+    /// </para>
+    /// <para>
+    /// <b>Not every 200 writes a row.</b> <c>created: false</c> means an
+    /// equal outcome was already on record and this call changed nothing —
+    /// which makes it naturally safe to retry, independently of the
+    /// idempotency key.
+    /// </para>
+    /// <para>
+    /// Needs <c>conversations:write</c> <i>and</i> the undeclared
+    /// <c>conversations:read</c> described on
+    /// <see cref="OutcomesAsync(string, CancellationToken)"/>; without the
+    /// read scope this answers 404.
+    /// </para>
+    /// </remarks>
+    /// <param name="conversationId">The conversation.</param>
+    /// <param name="outcome">The outcome, serialized as the request body.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The recorded outcome, with <c>created</c>.</returns>
+    public Task<JsonElement> RecordOutcomeAsync(
+        string conversationId,
+        object outcome,
+        CancellationToken cancellationToken = default)
+        => _transport.WriteJsonAsync(
+            HttpMethod.Post,
+            OutcomesPath(conversationId),
+            outcome,
+            null,
+            cancellationToken);
+
+    /// <summary>
+    /// Hand an open conversation back to an AI agent after a human took it.
+    /// <c>POST /v1/conversations/{id}/return-to-bot</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The reverse of an escalation: the thread leaves the human queue and
+    /// belongs to the named bot. <paramref name="botId"/> is <b>required and
+    /// not defaulted to whoever owned it before</b> — a thread three
+    /// assistants have touched has no obvious "the" bot, and guessing means
+    /// the visitor talks to the returns agent about a size exchange. List the
+    /// choices with <c>chatly.Bots.ListAsync</c>.
+    /// </para>
+    /// <para>
+    /// Needs <c>conversations:assign</c>, not <c>conversations:write</c>.
+    /// Refused on a closed thread.
+    /// </para>
+    /// </remarks>
+    /// <param name="conversationId">The conversation to hand back.</param>
+    /// <param name="botId">The bot to assign it to. A UUID.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The conversation, now owned by that bot.</returns>
+    public Task<JsonElement> ReturnToBotAsync(
+        string conversationId,
+        string botId,
+        CancellationToken cancellationToken = default)
+        => _transport.WriteJsonAsync(
+            HttpMethod.Post,
+            $"{Collection}/{Route.Segment(conversationId, nameof(conversationId))}/return-to-bot",
+            new { botId },
+            null,
+            cancellationToken);
+
+    /// <summary>
+    /// Per-user unread badge counts for the inbox sidebar.
+    /// <c>GET /v1/conversations/unread-counts</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>This is near-useless from an API key, and it is here because it
+    /// answers 200 rather than failing.</b> The counts are per <i>user</i>,
+    /// read from the caller's membership — and for a key, that membership's
+    /// user id is the key's own. So you get the unread state of a principal
+    /// that never opens conversations: zeroes, or whatever the key's own
+    /// read-markers happen to say. It is not the workspace's unread total and
+    /// there is no parameter that makes it one.
+    /// </para>
+    /// <para>
+    /// Shipped anyway, with this warning, because the alternative is an SDK
+    /// that silently lacks a route the manifest lists — and because a 200
+    /// with the wrong number is the failure a caller most needs told about.
+    /// For workspace-wide backlog, use
+    /// <see cref="UnattendedAsync(CancellationToken)"/>, whose <c>total</c>
+    /// is a real figure.
+    /// </para>
+    /// <para>
+    /// One object: four scalars plus three bucket arrays. Not a page and not
+    /// a bare array.
+    /// </para>
+    /// </remarks>
+    /// <param name="brand">Narrow to one brand. Null counts across all of them.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The caller's own unread counts.</returns>
+    public Task<JsonElement> UnreadCountsAsync(
+        string? brand = null,
+        CancellationToken cancellationToken = default)
+        => _transport.GetJsonAsync(
+            $"{Collection}/unread-counts",
+            new ChatlyQuery().Add("brand", brand),
+            cancellationToken);
+
+    /// <summary>
+    /// Patch the rich blocks on a message that has already been sent.
+    /// <c>PATCH /v1/conversations/{id}/messages/{messageId}/blocks</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For editing an interactive message in place — marking a card as paid,
+    /// disabling a button someone already pressed — without posting a second
+    /// message the visitor has to read. The widget re-renders the message
+    /// where it stands.
+    /// </para>
+    /// <para>
+    /// Needs <c>messages:write</c> <i>and</i> the undeclared
+    /// <c>conversations:read</c> described on
+    /// <see cref="OutcomesAsync(string, CancellationToken)"/>: the handler
+    /// resolves the conversation first, so a key without the read scope sees
+    /// a 404 here and not a 403.
+    /// </para>
+    /// </remarks>
+    /// <param name="conversationId">The conversation the message is in.</param>
+    /// <param name="messageId">The message to patch.</param>
+    /// <param name="patch">The block patch, serialized as the request body.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>The patch result.</returns>
+    public Task<JsonElement> UpdateBlocksAsync(
+        string conversationId,
+        string messageId,
+        object patch,
+        CancellationToken cancellationToken = default)
+        => _transport.WriteJsonAsync(
+            new HttpMethod("PATCH"),
+            $"{Collection}/{Route.Segment(conversationId, nameof(conversationId))}"
+            + $"/messages/{Route.Segment(messageId, nameof(messageId))}/blocks",
+            patch,
+            null,
+            cancellationToken);
+
+    private static string OutcomesPath(string conversationId)
+        => $"{Collection}/{Route.Segment(conversationId, nameof(conversationId))}/outcomes";
 }

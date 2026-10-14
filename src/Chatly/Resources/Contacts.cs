@@ -274,4 +274,68 @@ public sealed class ContactsResource
 
     private static string JourneyPath(string contactId)
         => $"{Collection}/{Route.Segment(contactId, nameof(contactId))}/journey";
+
+    /// <summary>
+    /// Fetch this contact's live customer cards from your own backends.
+    /// <c>POST /v1/contacts/{contactId}/cards</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>A POST that reads.</b> It creates nothing: the verb is a POST
+    /// because the request carries an optional conversation context in its
+    /// body, and the route is scoped to <c>contacts:read</c> accordingly.
+    /// Declared <c>@NoIdempotency()</c> for the same reason — this SDK still
+    /// sends a key, which the server ignores.
+    /// </para>
+    /// <para>
+    /// Each configured card is fetched from the operator's own URL while this
+    /// call is open, so it is as slow as the slowest of your endpoints and is
+    /// capped at 25 cards. A card with no blocks is not an error: read
+    /// <c>state</c>, which says whether it was unconfigured, timed out or
+    /// answered empty.
+    /// </para>
+    /// </remarks>
+    /// <param name="contactId">The contact to fetch cards for.</param>
+    /// <param name="conversationId">
+    /// Optional conversation context, passed through to your card endpoints
+    /// so a card can be specific to the thread. Must be a UUID; the body is
+    /// strict, so anything else is a 400.
+    /// </param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns><c>{ cards: [...] }</c> — one entry per configured card, at 201.</returns>
+    public Task<JsonElement> CardsAsync(
+        string contactId,
+        string? conversationId = null,
+        CancellationToken cancellationToken = default)
+        => _transport.WriteJsonAsync(
+            HttpMethod.Post,
+            $"{Collection}/{Route.Segment(contactId, nameof(contactId))}/cards",
+            new { conversationId },
+            null,
+            cancellationToken);
+
+    /// <summary>
+    /// Week-by-week sentiment for one contact.
+    /// <c>GET /v1/contacts/{id}/mood</c>.
+    /// </summary>
+    /// <remarks>
+    /// Derived from the sentiment scores on their messages, bucketed weekly —
+    /// so it is thin for a contact with few conversations and says nothing
+    /// about a contact with none. <paramref name="days"/> is validated rather
+    /// than clamped: below 7 or above 365 is a 400.
+    /// </remarks>
+    /// <param name="contactId">The contact.</param>
+    /// <param name="days">
+    /// The lookback window, 7 to 365. Null leaves the server's default of 90.
+    /// </param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>Weekly mood buckets.</returns>
+    public Task<JsonElement> MoodAsync(
+        string contactId,
+        int? days = null,
+        CancellationToken cancellationToken = default)
+        => _transport.GetJsonAsync(
+            $"{Collection}/{Route.Segment(contactId, nameof(contactId))}/mood",
+            new ChatlyQuery().Add("days", days),
+            cancellationToken);
 }

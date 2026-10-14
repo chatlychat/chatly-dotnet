@@ -113,14 +113,27 @@ an upsert only touches the fields you set.
 
 ## Every method
 
-55 methods, one per key-accessible route we hand-wrote. Each takes an optional
-`CancellationToken` last.
+162 methods, one per entry of the shared SDK manifest, each verified against
+its handler. Each takes an optional `CancellationToken` last.
 
 ### Credential
 
 | Method                 | Route                     |
 | ---------------------- | ------------------------- |
+| `chatly.MeAsync()`     | `GET /v1/me`              |
 | `chatly.WhoAmIAsync()` | `GET /v1/api-keys/whoami` |
+
+From an API key both return the same object — `MeAsync` is discriminated on
+`principal` and the key branch is byte-identical to `whoami`'s, because there
+is no user behind a key. The difference is the gate: **`GET /v1/me` carries no
+permission requirement at all** where `whoami` wants `workspace:read`, which
+makes `MeAsync` **the liveness check**. A key with no useful scope still gets a
+200 from it, and that answer is true. It is also `@AllowWhenSuspended`, so it
+answers for a suspended workspace.
+
+Only that one handler on the `/v1/me` controller accepts a key; the profile
+patch, the session list and the notification preferences each write or
+enumerate a `users` row, so they answer 403 and have no methods here.
 
 ### Contacts — `chatly.Contacts`
 
@@ -137,6 +150,13 @@ an upsert only touches the fields you set.
 | `UnsubscribeAsync(contactId, unsubscribed = true, reason?)` | `POST /v1/contacts/{id}/unsubscribe`  |
 | `JourneyAsync(contactId, options?)`                         | `GET /v1/contacts/{id}/journey`       |
 | `JourneyAllAsync(contactId, options?)`                      | auto-paginates the above              |
+| `CardsAsync(contactId, conversationId?)`                    | `POST /v1/contacts/{id}/cards`        |
+| `MoodAsync(contactId, days?)`                               | `GET /v1/contacts/{id}/mood`          |
+
+`CardsAsync` is a POST that **reads**: it fetches the contact's customer cards
+live from your own backends, so the optional conversation context goes in the
+body. It is as slow as the slowest of your endpoints and is capped at 25
+cards; a card with no blocks is not an error — read its `state`.
 
 `UpsertAsync` keys on `ExternalId`, so calling it twice with the same one
 updates a single record. `BulkUpsertAsync` takes up to 5000 rows per call and
@@ -144,23 +164,50 @@ reports per-row outcomes instead of failing the batch on one bad row.
 
 ### Conversations — `chatly.Conversations`
 
-| Method                                          | Route                                              |
-| ----------------------------------------------- | -------------------------------------------------- |
-| `ListAsync(options?)`                           | `GET /v1/conversations`                            |
-| `ListAllAsync(options?)`                        | auto-paginates `GET /v1/conversations`             |
-| `GetAsync(conversationId)`                      | `GET /v1/conversations/{id}`                       |
-| `MessagesAsync(conversationId, options?)`       | `GET /v1/conversations/{id}/messages`              |
-| `MessagesAllAsync(conversationId, options?)`    | auto-paginates the above                           |
-| `SendAsync(conversationId, message)`            | `POST /v1/conversations/{id}/messages`             |
-| `UnattendedAsync(options?)`                     | `GET /v1/conversations/unattended`                 |
-| `UnattendedAllAsync(options?)`                  | auto-paginates the above                           |
-| `AgentHandlingAsync(conversationId)`            | `GET /v1/conversations/{id}/agent-handling`        |
-| `SetAgentHandlingAsync(conversationId, state)`  | `PUT /v1/conversations/{id}/agent-handling`        |
-| `GeneratedRepliesAsync(conversationId)`         | `GET /v1/conversations/{id}/generated-replies`     |
-| `GenerateReplyAsync(conversationId, request?)`  | `POST /v1/conversations/{id}/generated-replies`    |
-| `ScheduledMessagesAsync(conversationId)`        | `GET /v1/conversations/{id}/scheduled-messages`    |
-| `ScheduleMessageAsync(conversationId, request)` | `POST /v1/conversations/{id}/scheduled-messages`   |
-| `CancelScheduledAsync(scheduledMessageId)`      | `DELETE /v1/conversations/scheduled-messages/{id}` |
+| Method                                                | Route                                               |
+| ----------------------------------------------------- | --------------------------------------------------- |
+| `ListAsync(options?)`                                 | `GET /v1/conversations`                             |
+| `ListAllAsync(options?)`                              | auto-paginates `GET /v1/conversations`              |
+| `GetAsync(conversationId)`                            | `GET /v1/conversations/{id}`                        |
+| `MessagesAsync(conversationId, options?)`             | `GET /v1/conversations/{id}/messages`               |
+| `MessagesAllAsync(conversationId, options?)`          | auto-paginates the above                            |
+| `SendAsync(conversationId, message)`                  | `POST /v1/conversations/{id}/messages`              |
+| `UnattendedAsync(options?)`                           | `GET /v1/conversations/unattended`                  |
+| `UnattendedAllAsync(options?)`                        | auto-paginates the above                            |
+| `AgentHandlingAsync(conversationId)`                  | `GET /v1/conversations/{id}/agent-handling`         |
+| `SetAgentHandlingAsync(conversationId, state)`        | `PUT /v1/conversations/{id}/agent-handling`         |
+| `GeneratedRepliesAsync(conversationId)`               | `GET /v1/conversations/{id}/generated-replies`      |
+| `GenerateReplyAsync(conversationId, request?)`        | `POST /v1/conversations/{id}/generated-replies`     |
+| `ScheduledMessagesAsync(conversationId)`              | `GET /v1/conversations/{id}/scheduled-messages`     |
+| `ScheduleMessageAsync(conversationId, request)`       | `POST /v1/conversations/{id}/scheduled-messages`    |
+| `CancelScheduledAsync(scheduledMessageId)`            | `DELETE /v1/conversations/scheduled-messages/{id}`  |
+| `LinkedAsync(conversationId)`                         | `GET /v1/conversations/{id}/linked`                 |
+| `OutcomesAsync(conversationId)`                       | `GET /v1/conversations/{id}/outcomes`               |
+| `RecordOutcomeAsync(conversationId, outcome)`         | `POST /v1/conversations/{id}/outcomes`              |
+| `ReturnToBotAsync(conversationId, botId)`             | `POST /v1/conversations/{id}/return-to-bot`         |
+| `UnreadCountsAsync(brand?)`                           | `GET /v1/conversations/unread-counts`               |
+| `UpdateBlocksAsync(conversationId, messageId, patch)` | `PATCH /v1/conversations/{id}/messages/{id}/blocks` |
+
+Three of these need a **second scope the route does not declare**.
+`OutcomesAsync`, `RecordOutcomeAsync` and `UpdateBlocksAsync` all resolve the
+conversation before doing their own work, so a key without
+`conversations:read` gets a **404 on every conversation** rather than a 403 —
+which reads as "no such thread" and sends you looking for the wrong bug.
+`chatly.WhoAmIAsync()` is the check.
+
+`UnreadCountsAsync` is **near-useless from an API key** and is here because it
+answers 200 rather than failing. The counts are the caller's own, read from
+its membership — and a key's membership user id is the key's own id, so you
+get the unread state of a principal that never opens a conversation. There is
+no parameter that makes it workspace-wide; `UnattendedAsync`'s `total` is the
+real backlog figure.
+
+`LinkedAsync` has an `items` key and no cursor, so it is not a page and has no
+walker. `RecordOutcomeAsync` reports `created: false` when an equal outcome
+was already on record, which makes it naturally safe to retry.
+`ReturnToBotAsync` requires the bot id and does not default to whoever owned
+the thread before — a thread three assistants have touched has no obvious
+"the" bot.
 
 `UnattendedAsync` is cursor-paginated, despite reading like a bounded
 operational list — it answers `{ items, nextCursor, total }`, and `total`
@@ -184,15 +231,43 @@ attributing its writes to them would be wrong the moment they leave.
 | `MergeAsync(ticketId, request)`                  | `POST /v1/tickets/{id}/merge`           |
 | `SplitAsync(ticketId, request)`                  | `POST /v1/tickets/{id}/split`           |
 | `BulkAsync(request)`                             | `POST /v1/tickets/bulk`                 |
+| `ConversationsAsync(ticketId)`                   | `GET /v1/tickets/{id}/conversations`    |
+| `LineageAsync(ticketId)`                         | `GET /v1/tickets/{id}/lineage`          |
+| `StatusHistoryAsync(ticketId)`                   | `GET /v1/tickets/{id}/status-history`   |
+| `TimeAsync(ticketId)`                            | `GET /v1/tickets/{id}/time`             |
+| `OpenCountAsync(conversationId)`                 | `GET /v1/tickets/open-count/{id}`       |
+
+`OpenCountAsync`'s path parameter is a **conversation** id, despite living
+under `/v1/tickets`. `LineageAsync` returns the raw `splitFromTicketId` /
+`parentTicketId` columns beside the resolved references, and that pairing
+matters: a null reference beside a non-null id is a dangling pointer, which
+neither column has a foreign key to prevent. `StatusHistoryAsync` is **oldest
+first** — the opposite of most lists here — and capped, with `truncated`
+distinguishing a capped timeline from a short one. `TimeAsync` has an `items`
+key and no cursor, plus `totalMinutes` and `billableMinutes`; the billable
+figure is computed server-side, so do not re-derive it from the entries you
+can see.
 
 ### Macros — `chatly.Macros`
 
-| Method                          | Route                    |
-| ------------------------------- | ------------------------ |
-| `ListAsync(options?)`           | `GET /v1/macros`         |
-| `CreateAsync(macro)`            | `POST /v1/macros`        |
-| `UpdateAsync(macroId, changes)` | `PATCH /v1/macros/{id}`  |
-| `DeleteAsync(macroId)`          | `DELETE /v1/macros/{id}` |
+| Method                          | Route                             |
+| ------------------------------- | --------------------------------- |
+| `ListAsync(options?)`           | `GET /v1/macros`                  |
+| `CreateAsync(macro)`            | `POST /v1/macros`                 |
+| `UpdateAsync(macroId, changes)` | `PATCH /v1/macros/{id}`           |
+| `DeleteAsync(macroId)`          | `DELETE /v1/macros/{id}`          |
+| `GetAsync(macroId)`             | `GET /v1/macros/{id}`             |
+| `ActionsAsync()`                | `GET /v1/macros/actions`          |
+| `TemplatesAsync()`              | `GET /v1/macros/templates`        |
+| `TemplateAsync(slug)`           | `GET /v1/macros/templates/{slug}` |
+
+`ActionsAsync` is a static catalogue, and each entry names the **permission**
+its action needs — which is what decides whether the agent applying the macro
+can run it, and that failure arrives at apply time rather than at save time.
+`TemplatesAsync` answers `{ items, total }` with no cursor: `total` is just
+`items.length` over a frozen catalogue, not a hint that more exist. Templates
+are addressed by **slug**, not id, because they are a shipped catalogue rather
+than workspace rows.
 
 `ListAsync` is the one list method here that is **not** paginated and does not
 return a page. The endpoint answers a bare JSON array — the service caps it at
@@ -243,39 +318,355 @@ read the facets from a single page.
 `ListAsync` takes an `EventsListOptions`, whose `ContactId` scopes the stream
 to one person.
 
-### Webhook deliveries — `chatly.Webhooks`
+### Webhooks — `chatly.Webhooks`
 
 | Method                                                       | Route                                         |
 | ------------------------------------------------------------ | --------------------------------------------- |
+| `ListAsync()`                                                | `GET /v1/webhooks`                            |
+| `CreateAsync(endpoint)`                                      | `POST /v1/webhooks`                           |
+| `EventsAsync()`                                              | `GET /v1/webhooks/events`                     |
+| `SchemaVersionsAsync()`                                      | `GET /v1/webhooks/schema-versions`            |
+| `SetSchemaVersionAsync(endpointId, schemaVersion)`           | `PATCH /v1/webhooks/{id}/schema-version`      |
 | `DeliveriesAsync(options?)` / `DeliveriesAllAsync(options?)` | `GET /v1/webhooks/deliveries`                 |
 | `DeliveryAsync(deliveryId)`                                  | `GET /v1/webhooks/deliveries/{id}`            |
 | `RedeliverAsync(deliveryId)`                                 | `POST /v1/webhooks/deliveries/{id}/redeliver` |
+| `DeleteAsync(endpointId)`                                    | `DELETE /v1/webhooks/{id}`                    |
+
+`/v1/webhooks` is the endpoints and `/v1/webhooks/deliveries` is the log; only
+the second is a page. `CreateAsync` is the only response that carries
+`secret`, which is what `ChatlyWebhooks.VerifySignature` needs. An
+unrecognised `schemaVersion` is **refused here**, unlike at dispatch time
+where an unknown version resolves to the latest: loud on the write, generous
+on the read.
+
+`DeleteAsync` answers **200 with `{ ok: true }`**, not a 204. It is new, and
+earlier versions of this README told you to work around its absence by
+pointing the endpoint at a dead URL — which is not a deletion: the
+subscription stays alive and the delivery log fills with failures. The route
+refused an API key while `CreateAsync` accepted one, so a deploy pipeline
+registering an endpoint per environment leaked one into the customer's
+workspace on every run with nothing able to clean up. Both need
+`integrations:write`, on the argument that a key which can add a delivery
+target can already do the thing with consequences.
+
+One wrinkle: the delete handler declares no idempotency posture, so it
+inherits the controller's `@RequireIdempotencyKey()` and answers **428 in
+production without the header**. This SDK mints one per write, so that only
+bites if you reach the route some other way.
 
 ### Reports — `chatly.Reports`
 
-| Method                            | Route                                  |
-| --------------------------------- | -------------------------------------- |
-| `OverviewAsync(query?)`           | `GET /v1/reports/overview`             |
-| `AgentsAsync(query?)`             | `GET /v1/reports/agents`               |
-| `ConversationsByDayAsync(query?)` | `GET /v1/reports/conversations-by-day` |
-| `SlaAsync(query?)`                | `GET /v1/reports/sla`                  |
+| Method                             | Route                                       |
+| ---------------------------------- | ------------------------------------------- |
+| `OverviewAsync(query?)`            | `GET /v1/reports/overview`                  |
+| `AgentsAsync(query?)`              | `GET /v1/reports/agents`                    |
+| `ConversationsByDayAsync(query?)`  | `GET /v1/reports/conversations-by-day`      |
+| `SlaAsync(query?)`                 | `GET /v1/reports/sla`                       |
+| `AttributionAsync(query?)`         | `GET /v1/reports/attribution`               |
+| `SourcesAsync(query?)`             | `GET /v1/reports/sources`                   |
+| `CohortsAsync(query?)`             | `GET /v1/reports/cohorts`                   |
+| `LabelsAsync(query?)`              | `GET /v1/reports/labels`                    |
+| `TeamsAsync(query?)`               | `GET /v1/reports/teams`                     |
+| `ResponseTimesAsync(query?)`       | `GET /v1/reports/response-times`            |
+| `VoiceAsync(query?)`               | `GET /v1/reports/voice`                     |
+| `ThemesAsync(query?)`              | `GET /v1/reports/themes`                    |
+| `ThemeConversationsAsync(themeId)` | `GET /v1/reports/themes/{id}/conversations` |
 
 Each accepts a `ChatlyQuery` for the date and grouping parameters, which differ
 per report; see the REST reference for what each one takes.
 
-### Channels, billing, workspace
+Four of the thirteen answer a **bare array** — `AgentsAsync`,
+`ConversationsByDayAsync`, `AttributionAsync`, `SourcesAsync` — and the rest
+answer an object. A few have a null that means something: `AttributionAsync`'s
+`value: null` row is the untagged remainder and `SourcesAsync`'s null
+`channelId` is a real bucket, so dropping either stops the totals adding up,
+and `ResponseTimesAsync` returns **null** percentiles when `sampleSize` is 0
+rather than zeros, so a quiet window does not read as instant replies.
+`LabelsAsync` caps `rows` at the 50 busiest labels with the remainder counted
+separately, and there is no cursor past the cap. `ThemesAsync` is nightly
+snapshot data: a null `batchDate` means no batch has run, and
+`ThemeConversationsAsync` answers 200 with an empty list for a purged theme
+rather than a 404.
 
-| Method                                             | Route                        |
-| -------------------------------------------------- | ---------------------------- |
-| `chatly.Channels.ListAsync()`                      | `GET /v1/channels`           |
-| `chatly.Channels.GetAsync(channelId)`              | `GET /v1/channels/{id}`      |
-| `chatly.Billing.PlansAsync()`                      | `GET /v1/billing/plans`      |
-| `chatly.Billing.UsageAsync(eventType, from?, to?)` | `GET /v1/billing/usage`      |
-| `chatly.Workspace.SettingsAsync()`                 | `GET /v1/workspace/settings` |
-| `chatly.Workspace.LabelsAsync()`                   | `GET /v1/labels`             |
-| `chatly.Workspace.InboxesAsync()`                  | `GET /v1/inboxes`            |
-| `chatly.Workspace.TeamMembersAsync(teamId)`        | `GET /v1/teams/{id}/members` |
-| `chatly.Workspace.AgentSkillsAsync()`              | `GET /v1/agents/skills`      |
+### Channels — `chatly.Channels`
+
+| Method                            | Route                                  |
+| --------------------------------- | -------------------------------------- |
+| `ListAsync()`                     | `GET /v1/channels`                     |
+| `GetAsync(channelId)`             | `GET /v1/channels/{id}`                |
+| `AdaptersAsync()`                 | `GET /v1/channels/adapters`            |
+| `CreateAsync(channel)`            | `POST /v1/channels`                    |
+| `UpdateAsync(channelId, changes)` | `PATCH /v1/channels/{id}`              |
+| `RotateSecretAsync(channelId)`    | `POST /v1/channels/{id}/secret/rotate` |
+
+`AdaptersAsync` is the only route on this surface that answers an array of
+**strings** rather than objects. Note the rotate path is `/secret/rotate`, not
+`/rotate-secret` as on the card routes. An **empty** allowed-origins list on
+`UpdateAsync` means _any_ origin, not none, and an empty array is invisible in
+a JSON diff — read `originsRestricted` on the response instead of counting
+origins. There is no delete: removing a channel destroys conversation history,
+so that route needs a signed-in person.
+
+### Billing — `chatly.Billing`
+
+| Method                                   | Route                           |
+| ---------------------------------------- | ------------------------------- |
+| `PlansAsync()`                           | `GET /v1/billing/plans`         |
+| `SummaryAsync()`                         | `GET /v1/billing`               |
+| `UsageAsync(eventType, from?, to?)`      | `GET /v1/billing/usage`         |
+| `UsageDailyAsync(eventType, from?, to?)` | `GET /v1/billing/usage/daily`   |
+| `UsageMonthlyAsync(month?)`              | `GET /v1/billing/usage/monthly` |
+| `InvoicesAsync(cursor?, limit?)`         | `GET /v1/billing/invoices`      |
+
+`SummaryAsync` is the collection root, `/v1/billing`, with no sub-path.
+`UsageMonthlyAsync` is the one usage route needing no `eventType` — it returns
+all four, plus a grand total — and its `month` is `YYYY-MM` or a 400, never a
+coerced free-form date. `UsageDailyAsync` returns a **dense** series, one
+entry per UTC day including zeros.
+
+`InvoicesAsync` is genuinely cursor-paginated and still returns a plain
+`JsonElement`, because **its envelope key is `data`, not `items`**. That is
+why there is no `InvoicesAllAsync`: a walker reading `items` would report an
+empty page forever, which is a wrong answer with a 200 rather than a visible
+failure. Read `data` and `nextCursor` and pass the cursor back.
+
+### Workspace — `chatly.Workspace`
+
+| Method                     | Route                        |
+| -------------------------- | ---------------------------- |
+| `SettingsAsync()`          | `GET /v1/workspace/settings` |
+| `LabelsAsync()`            | `GET /v1/labels`             |
+| `InboxesAsync()`           | `GET /v1/inboxes`            |
+| `TeamMembersAsync(teamId)` | `GET /v1/teams/{id}/members` |
+| `AgentSkillsAsync()`       | `GET /v1/agents/skills`      |
+| `KeyScopesAsync()`         | `GET /v1/api-keys/scopes`    |
+| `MineAsync()`              | `GET /v1/workspaces/me`      |
+| `SecretsAsync()`           | `GET /v1/workspace/secrets`  |
+
+`KeyScopesAsync` is the second of only two routes on the api-keys controller a
+key may call, alongside `whoami`; everything else there stays closed so a
+leaked read-only key cannot mint itself a better one. It is deliberately
+_not_ the whole permission vocabulary — key auth is opt-in per route, and this
+endpoint used to list all eighty permissions, which let a customer mint a key
+scoped to something the guard was never going to honour. Reach for it when a
+call returns 403 and you want to know which scope it wanted.
+
+`SecretsAsync` is a census: one entry per stored credential across nine
+tables, reporting existence and timestamps and **never a value**.
+
+`MineAsync` is a bare array, and for a key it holds **exactly one entry** —
+the workspace the key was minted in — which makes it the cheapest way to
+confirm which tenant a credential actually points at. Its `role` is the
+synthetic `restricted` the API mints for every key, not a stored membership
+role: what a key may do is its scope set, which `MeAsync` answers, and
+reporting `owner` because the person who created the key was one would
+overstate the credential. It is `@AllowWhenSuspended`, so it answers when the
+active workspace is suspended — that is how a caller discovers the others, and
+if everything else is failing while this still works, suspension is the thing
+to check.
+
+### AI — `chatly.Ai`
+
+| Method                               | Route                                   |
+| ------------------------------------ | --------------------------------------- |
+| `ProvidersAsync()`                   | `GET /v1/ai-providers`                  |
+| `AddProviderAsync(provider, apiKey)` | `POST /v1/ai-providers`                 |
+| `TestProviderAsync(provider)`        | `POST /v1/ai-providers/{provider}/test` |
+| `QuotaAsync()`                       | `GET /v1/ai/quota`                      |
+| `ToneAsync()`                        | `GET /v1/ai/tone`                       |
+| `SetToneAsync(rules)`                | `PUT /v1/ai/tone`                       |
+| `GenerateToneAsync(styleGuide)`      | `POST /v1/ai/tone/generate`             |
+| `TonePreviewAsync()`                 | `GET /v1/ai/tone/preview`               |
+| `ToolsAsync()`                       | `GET /v1/ai/tools`                      |
+| `CreateToolAsync(tool)`              | `POST /v1/ai/tools`                     |
+| `UpdateToolAsync(toolId, changes)`   | `PATCH /v1/ai/tools/{id}`               |
+| `DeleteToolAsync(toolId)`            | `DELETE /v1/ai/tools/{id}`              |
+
+Two controllers sit behind one property and their paths disagree: credentials
+are `/v1/ai-providers`, everything else is `/v1/ai/…`. Nothing here ever
+returns a provider key — a provider row carries a four-character `keyHint` and
+no field for the key itself.
+
+`SetToneAsync` is a **whole replacement**: rules you omit are deleted, and
+there is no per-rule route. Its body is `{ rules }` and its response is the
+same bare array `ToneAsync` returns. `GenerateToneAsync` saves nothing — it
+proposes rules for a person to approve, and it is metered AI spend, so
+`QuotaAsync` can explain why it suddenly refuses.
+
+### Bots and external agents — `chatly.Bots`
+
+| Method                                           | Route                                          |
+| ------------------------------------------------ | ---------------------------------------------- |
+| `ListAsync(options?)` / `ListAllAsync(options?)` | `GET /v1/bots`                                 |
+| `GetAsync(botId)`                                | `GET /v1/bots/{id}`                            |
+| `CreateAsync(bot)`                               | `POST /v1/bots`                                |
+| `UpdateAsync(botId, changes)`                    | `PATCH /v1/bots/{id}`                          |
+| `AnalyticsAsync(botId, days?)`                   | `GET /v1/bots/{id}/analytics`                  |
+| `DeliveriesAsync(botId, options?, status?)`      | `GET /v1/bots/{id}/deliveries`                 |
+| `DeliveriesAllAsync(botId, options?, status?)`   | auto-paginates the above                       |
+| `DeliveryAsync(botId, deliveryId)`               | `GET /v1/bots/{id}/deliveries/{deliveryId}`    |
+| `RedeliverAsync(botId, deliveryId)`              | `POST /v1/bots/{id}/deliveries/{id}/redeliver` |
+| `TestDeliveryAsync(botId)`                       | `POST /v1/bots/{id}/test-delivery`             |
+| `UpdateExternalAsync(botId, changes)`            | `PATCH /v1/bots/{id}/external`                 |
+| `RotateExternalSecretAsync(botId)`               | `POST /v1/bots/{id}/external/rotate-secret`    |
+
+A _bot_ is a Chatly-hosted persona. An _external agent_ is a bot whose replies
+come from **your** endpoint: Chatly signs a payload and POSTs it to you. The
+two credentials an external agent gets point in opposite directions —
+`signingSecret` is what you verify our deliveries with, `token` is what you
+authenticate back to us with — and both are shown exactly once, by
+`CreateAsync`.
+
+`TestDeliveryAsync` is the first call to make after wiring one up: it waits
+for your endpoint and returns the status and up to 2,000 characters of the
+body, where `RedeliverAsync` only reports that a job was queued. A delivery
+_list_ row does not carry the signed payload; `DeliveryAsync` does.
+
+### Bot routing — `chatly.BotRoutes`
+
+| Method                          | Route                         |
+| ------------------------------- | ----------------------------- |
+| `ListAsync()`                   | `GET /v1/bot-routes`          |
+| `FieldsAsync()`                 | `GET /v1/bot-routes/fields`   |
+| `CreateAsync(route)`            | `POST /v1/bot-routes`         |
+| `UpdateAsync(routeId, changes)` | `PATCH /v1/bot-routes/{id}`   |
+| `DeleteAsync(routeId)`          | `DELETE /v1/bot-routes/{id}`  |
+| `ResolveAsync(context)`         | `POST /v1/bot-routes/resolve` |
+
+Rules are evaluated in order and the first match wins, so `ListAsync` returns
+them in evaluation order and you should not re-sort it. `ResolveAsync` is a
+POST that **changes nothing** — a dry run that reports the selected route
+_and_ every route's verdict, which is the part worth having: "no bot answered"
+and "the wrong bot answered" look identical from the selection alone.
+
+### Brands — `chatly.Brands`
+
+| Method                          | Route                    |
+| ------------------------------- | ------------------------ |
+| `ListAsync()`                   | `GET /v1/brands`         |
+| `CreateAsync(brand)`            | `POST /v1/brands`        |
+| `UpdateAsync(brandId, changes)` | `PATCH /v1/brands/{id}`  |
+| `DeleteAsync(brandId)`          | `DELETE /v1/brands/{id}` |
+
+`DeleteAsync` is a soft delete answering 200 with the id; everything that
+referenced the brand keeps referencing it. `domain` is the brand's help-centre
+hostname and `replyDomain` is where notification replies are addressed — they
+are usually different, and pointing an MX at the first is the mistake the
+split exists to prevent.
+
+### Interactive canvas steps — `chatly.CanvasSteps`
+
+| Method                         | Route                                |
+| ------------------------------ | ------------------------------------ |
+| `GetAsync(stepId)`             | `GET /v1/canvas-steps/{id}`          |
+| `ResolveAsync(stepId, canvas)` | `POST /v1/canvas-steps/{id}/resolve` |
+
+While a step is pending the visitor is watching a progress line, so this is a
+latency-sensitive path. The canvas you supply **replaces that line in place**
+rather than posting a new message. A step id is single-use, which is what
+makes a retry after a timeout safe: exactly one resolve wins and the loser is
+told the step is already resolved.
+
+### Customer cards — `chatly.CustomerCards`
+
+| Method                         | Route                                        |
+| ------------------------------ | -------------------------------------------- |
+| `ListAsync()`                  | `GET /v1/customer-cards`                     |
+| `CreateAsync(card)`            | `POST /v1/customer-cards`                    |
+| `UpdateAsync(cardId, changes)` | `PATCH /v1/customer-cards/{id}`              |
+| `RotateSecretAsync(cardId)`    | `POST /v1/customer-cards/{id}/rotate-secret` |
+| `DeleteAsync(cardId)`          | `DELETE /v1/customer-cards/{id}`             |
+
+A card is a URL plus a signing secret; Chatly POSTs a signed request to it and
+renders what you answer with, so the data never leaves your systems. No
+response carries a header _value_ — only names — and the secret appears only
+in the create and rotate responses. On `UpdateAsync`, an absent field is
+unchanged but `headers: {}` **clears every header**.
+
+### Card endpoint secrets — `chatly.CustomerCardEndpoints`
+
+| Method                            | Route                                                   |
+| --------------------------------- | ------------------------------------------------------- |
+| `ListAsync()`                     | `GET /v1/customer-card-endpoints`                       |
+| `CreateAsync(endpoint)`           | `POST /v1/customer-card-endpoints`                      |
+| `RotateSecretAsync(endpointId)`   | `POST /v1/customer-card-endpoints/{id}/rotate-secret`   |
+| `ActivateSecretAsync(endpointId)` | `POST /v1/customer-card-endpoints/{id}/activate-secret` |
+| `DeleteAsync(endpointId)`         | `DELETE /v1/customer-card-endpoints/{id}`               |
+
+One secret per URL instead of one per card, and the reason to prefer it is
+rotation: a card secret swaps instantly and breaks any endpoint not yet
+redeployed, while an endpoint secret is minted _pending_ and starts signing
+only when you activate it. Mint, deploy, activate. `ActivateSecretAsync` is a
+409 when there is nothing pending, so it is not an idempotent "make sure".
+`DeleteAsync` reverts signing to per-card secrets rather than stopping it.
+
+### Documentation sources — `chatly.DocsSources`
+
+| Method                           | Route                                |
+| -------------------------------- | ------------------------------------ |
+| `ProvidersAsync()`               | `GET /v1/docs-sources/providers`     |
+| `ListAsync()`                    | `GET /v1/docs-sources`               |
+| `DiscoverAsync(credentials)`     | `POST /v1/docs-sources/discover`     |
+| `CreateAsync(source)`            | `POST /v1/docs-sources`              |
+| `UpdateAsync(sourceId, changes)` | `PATCH /v1/docs-sources/{id}`        |
+| `SyncAsync(sourceId, full)`      | `POST /v1/docs-sources/{id}/sync`    |
+| `WebhookAsync(sourceId)`         | `POST /v1/docs-sources/{id}/webhook` |
+| `DeleteAsync(sourceId)`          | `DELETE /v1/docs-sources/{id}`       |
+
+`DiscoverAsync` is a POST that answers a **bare array** and stores nothing —
+the credential goes in the body rather than a query string. Nothing here syncs
+inline: `SyncAsync` enqueues the same job the 15-minute scan runs.
+`WebhookAsync` answers 200 with `subscribed: false` and a reason when the
+token cannot manage webhooks, so read the field and not the status.
+`DeleteAsync` answers 200 with `{ kept }` — no article is deleted.
+
+### Transactional emails — `chatly.EmailTemplates`
+
+| Method                        | Route                               |
+| ----------------------------- | ----------------------------------- |
+| `ListAsync()`                 | `GET /v1/email-templates`           |
+| `PreviewAsync(template)`      | `POST /v1/email-templates/preview`  |
+| `UpdateAsync(kind, template)` | `PUT /v1/email-templates/{kind}`    |
+| `DeleteAsync(kind)`           | `DELETE /v1/email-templates/{kind}` |
+
+Addressed by _kind_, and the set is closed: `workspace_invite`,
+`trial_ending_reminder`, `conversation_cap_warning`,
+`hired_agent_engagement_invite`, `hired_agent_engagement_started`. These are
+the platform's own notifications, not conversation replies.
+
+`PreviewAsync` reports the tokens you wrote that the kind does not supply,
+which is the field to read: a mistyped token renders as nothing rather than
+failing. `DeleteAsync` deletes the _override_ rather than copying today's
+default, so the workspace goes back to tracking the built-in copy — and it has
+a body, `{ restored: false }` at 200 when there was no override, so it is safe
+to call unconditionally.
+
+### Knowledge gaps — `chatly.KnowledgeGaps`
+
+| Method                       | Route                                |
+| ---------------------------- | ------------------------------------ |
+| `ListAsync(status?, limit?)` | `GET /v1/knowledge-gaps`             |
+| `UpdateAsync(gapId, status)` | `PATCH /v1/knowledge-gaps/{id}`      |
+| `DraftAsync(gapId)`          | `POST /v1/knowledge-gaps/{id}/draft` |
+
+Questions real traffic asked that retrieval could not answer, most-asked
+first. `DraftAsync` creates a **draft** article — nothing is published — and
+not every 200 produces one: a gap recorded without a usable source
+conversation answers with a reason instead of an id.
+
+### Triggers — `chatly.Triggers`
+
+| Method                                           | Route                      |
+| ------------------------------------------------ | -------------------------- |
+| `ListAsync(options?)` / `ListAllAsync(options?)` | `GET /v1/triggers`         |
+| `CreateAsync(trigger)`                           | `POST /v1/triggers`        |
+| `DeleteAsync(triggerId)`                         | `DELETE /v1/triggers/{id}` |
+
+`CreateAsync` is an **upsert**: with an `id` in the body it updates, without
+one it inserts, and there is no PATCH route. Both branches answer **201**, so
+do not branch on the status to tell a create from an update. `eventType` is a
+free string matched by exact equality at dispatch, so a trigger naming an
+event nothing publishes is accepted and simply never fires.
 
 ### Helpers, which make no HTTP call
 
@@ -287,13 +678,21 @@ per report; see the REST reference for what each one takes.
 
 ### Not included, and why
 
-Reactions and channel/widget configuration have no methods here. A reaction
-records _who_ reacted and an API key is not a person, so those routes require
-a signed-in user and answer a key with 403. Channel configuration needs a
-scope no key can hold. Both used to be in our Node SDK and both failed for
-every caller — shipping a method that always fails is worse than not shipping
-it, because the failure arrives at runtime, in production, inside someone
-else's integration.
+Reactions, contact block/unblock and channel deletion have no methods here.
+Each of those routes records _who_ did it, or destroys history a person should
+be named for, so each needs a signed-in user and answers a key with 403.
+Reactions used to be in our Node SDK and failed for every caller — shipping a
+method that always fails is worse than not shipping it, because the failure
+arrives at runtime, in production, inside someone else's integration.
+
+Channel _configuration_ is included now, and an earlier version of this
+section said it was not. `CreateAsync`, `UpdateAsync` and `RotateSecretAsync`
+were opened to key auth; only the delete stays closed.
+
+`DELETE /v1/webhooks/{id}` used to be listed here as key-accessible with no
+method, because it was opened after the shared manifest was frozen and a
+160th lock entry would have failed the cross-SDK parity gate. The manifest
+lists it now, and `Webhooks.DeleteAsync` is the method.
 
 ---
 
@@ -571,8 +970,9 @@ sockets.
 
 ## The escape hatch
 
-140 of the API's routes accept an API key and 55 of them have a method here.
-For the other 85, `RequestAsync` goes through the same authentication,
+162 key-accessible routes have a method here, and the API has more — the
+live count was 174 open out of 909 on 2026-10-14, and it grows as routes are
+opened to key auth. For the rest, `RequestAsync` goes through the same authentication,
 idempotency-key minting, retries and typed errors:
 
 ```csharp
@@ -630,7 +1030,8 @@ dotnet run --project tests/Verify/Verify.csproj
 
 The suite covers all nine items of the cross-language SDK contract, including
 both pinned vectors (the identity-hash digest and the exact webhook delivery),
-and drives all 55 methods to assert the HTTP verb and path each one produces.
+and drives all 162 methods to assert the HTTP verb and path each one produces,
+plus the response shape its decoder expects.
 
 Running it also regenerates `surface.lock.json`, the committed record of the
 request each method was _observed_ to issue, and fails if that disagrees with

@@ -84,8 +84,8 @@ public static class CheckRegistry
         new Check("GET /v1/billing/usage sends the eventType and window", RouteShapeChecks.BillingUsageSendsEventTypeAndWindow),
 
         new Check("surface.json: the 204 fixture really sends no body", SurfaceChecks.TheEmptyFixtureReallySendsNoBody),
-        new Check("surface.json: the table covers all 55 methods", SurfaceChecks.TableCoversTheWholeSpec),
-        new Check("surface.json: the declared shapes are 14 array / 10 page / 30 object / 1 empty", SurfaceChecks.DeclaredShapeDistributionIsNotFlat),
+        new Check("surface.json: the table covers all 162 methods", SurfaceChecks.TableCoversTheWholeSpec),
+        new Check("surface.json: the declared shapes are 33 array / 13 page / 115 object / 1 empty", SurfaceChecks.DeclaredShapeDistributionIsNotFlat),
         new Check("surface.json: the fake's response shapes match the manifest", SurfaceChecks.DeclaredShapesMatchTheManifestAsync),
         new Check("surface.json: every method hits its route and decodes the declared shape", SurfaceChecks.EveryMethodHitsTheSpecifiedRoute),
         new Check("surface.json: every paged entry has an auto-paginator", SurfaceChecks.EveryPagedEntryHasAnAutoPaginator),

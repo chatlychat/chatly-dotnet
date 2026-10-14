@@ -104,6 +104,17 @@ public sealed class ChatlyClient : IDisposable
         Channels = new ChannelsResource(transport);
         Billing = new BillingResource(transport);
         Workspace = new WorkspaceResource(transport);
+        Ai = new AiResource(transport);
+        Bots = new BotsResource(transport);
+        BotRoutes = new BotRoutesResource(transport);
+        Brands = new BrandsResource(transport);
+        CanvasSteps = new CanvasStepsResource(transport);
+        CustomerCards = new CustomerCardsResource(transport);
+        CustomerCardEndpoints = new CustomerCardEndpointsResource(transport);
+        DocsSources = new DocsSourcesResource(transport);
+        EmailTemplates = new EmailTemplatesResource(transport);
+        KnowledgeGaps = new KnowledgeGapsResource(transport);
+        Triggers = new TriggersResource(transport);
     }
 
     private static Transport OwnedTransport(ChatlyClientOptions options)
@@ -178,8 +189,41 @@ public sealed class ChatlyClient : IDisposable
     /// <summary>Plans and current usage.</summary>
     public BillingResource Billing { get; }
 
-    /// <summary>Workspace settings, labels, inboxes, team members and agent skills.</summary>
+    /// <summary>Workspace settings, labels, inboxes, team members, agent skills, key scopes and the credential census.</summary>
     public WorkspaceResource Workspace { get; }
+
+    /// <summary>AI provider keys, the spend meter, tone rules and custom tools.</summary>
+    public AiResource Ai { get; }
+
+    /// <summary>AI agents and externally-hosted agents, with their delivery log.</summary>
+    public BotsResource Bots { get; }
+
+    /// <summary>The first-match-wins rules that pick which AI agent answers a visitor.</summary>
+    public BotRoutesResource BotRoutes { get; }
+
+    /// <summary>Brands — optional sub-tenants inside one workspace.</summary>
+    public BrandsResource Brands { get; }
+
+    /// <summary>Pending interactive widget steps, waiting on your backend for the next canvas.</summary>
+    public CanvasStepsResource CanvasSteps { get; }
+
+    /// <summary>Sidebar panels your own backend serves, live, when an agent opens a thread.</summary>
+    public CustomerCardsResource CustomerCards { get; }
+
+    /// <summary>Per-URL signing secrets for those panels, with a staged rotation.</summary>
+    public CustomerCardEndpointsResource CustomerCardEndpoints { get; }
+
+    /// <summary>Documentation providers pulled into the knowledge base on a schedule.</summary>
+    public DocsSourcesResource DocsSources { get; }
+
+    /// <summary>The platform's own transactional emails, and this workspace's overrides.</summary>
+    public EmailTemplatesResource EmailTemplates { get; }
+
+    /// <summary>Questions real traffic asked that the knowledge base could not answer.</summary>
+    public KnowledgeGapsResource KnowledgeGaps { get; }
+
+    /// <summary>Event-driven rules: conditions over a payload, and actions.</summary>
+    public TriggersResource Triggers { get; }
 
     /// <summary>
     /// Describe the credential this client is using: which workspace it
@@ -192,9 +236,14 @@ public sealed class ChatlyClient : IDisposable
     /// rather than a puzzling 403 from an unrelated endpoint in production.
     /// </para>
     /// <para>
-    /// <c>GET /v1/api-keys/whoami</c> is deliberately the only route on the
-    /// api-keys controller that accepts an API key: minting or listing keys
-    /// with a key would let a leaked read-only key escalate itself.
+    /// It is one of only two routes on the api-keys controller that accept an
+    /// API key — the other is
+    /// <see cref="WorkspaceResource.KeyScopesAsync(CancellationToken)"/>,
+    /// which lists the scopes a key can be granted. Everything else there
+    /// stays closed: minting or listing keys with a key would let a leaked
+    /// read-only key escalate itself. (This comment claimed <c>whoami</c> was
+    /// the <i>only</i> one until 2026-10-14, which was never true of
+    /// <c>/scopes</c> once it was opened.)
     /// </para>
     /// </remarks>
     /// <param name="cancellationToken">Cancels the request.</param>
@@ -204,6 +253,49 @@ public sealed class ChatlyClient : IDisposable
     /// </returns>
     public Task<JsonElement> WhoAmIAsync(CancellationToken cancellationToken = default)
         => _transport.GetJsonAsync("/v1/api-keys/whoami", null, cancellationToken);
+
+    /// <summary>
+    /// Whoever is calling — a person and their active membership, or, for an
+    /// API key, the key. <c>GET /v1/me</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The response is <b>discriminated on <c>principal</c></b>. From this
+    /// SDK it is always <c>"api_key"</c>, and the object beside it is the same
+    /// one <see cref="WhoAmIAsync(CancellationToken)"/> returns — there is no
+    /// user behind a key, and this handler never looks for one. (It also
+    /// never touches the database on the key path, which is why it is cheap
+    /// enough to poll.)
+    /// </para>
+    /// <para>
+    /// So why have both? Because this route carries <b>no
+    /// <c>@RequirePermission</c> at all</b>, where <c>whoami</c> wants
+    /// <c>workspace:read</c>. That makes this <b>the liveness check</b>: a
+    /// key with no useful scope still gets a 200 here, and the answer is
+    /// true. Reach for it when you want to know whether a credential is live
+    /// and what it was granted, and for <see cref="WhoAmIAsync(CancellationToken)"/>
+    /// when you are already sure the key can read the workspace.
+    /// </para>
+    /// <para>
+    /// Withholding a credential's own description from the credential is how
+    /// an integrator ends up learning their scopes by provoking 403s, which
+    /// is the reasoning on the handler for leaving it ungated. It is also
+    /// <c>@AllowWhenSuspended</c>, so it answers for a suspended workspace.
+    /// </para>
+    /// <para>
+    /// Only this handler on the <c>/v1/me</c> controller accepts a key. The
+    /// profile patch, the session list and the notification preferences each
+    /// write or enumerate a <c>users</c> row, and a key has none — so they
+    /// answer 403 and this SDK ships no method for them.
+    /// </para>
+    /// </remarks>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>
+    /// <c>{ principal: "api_key", … }</c> for a key: its workspace and its
+    /// grant list.
+    /// </returns>
+    public Task<JsonElement> MeAsync(CancellationToken cancellationToken = default)
+        => _transport.GetJsonAsync("/v1/me", null, cancellationToken);
 
     /// <summary>
     /// A view of this client that pins one <c>Idempotency-Key</c> across every
@@ -249,10 +341,14 @@ public sealed class ChatlyClient : IDisposable
     /// </summary>
     /// <remarks>
     /// <para>
-    /// 140 of the API's routes accept an API key and 55 of those have a method
-    /// here. This is how you reach the other 85 without abandoning the SDK:
-    /// it goes through the same authentication, idempotency-key minting,
-    /// retries and typed errors as every typed method.
+    /// 159 key-accessible routes have a typed method here, and the API has
+    /// more than that — <c>scripts/report-api-key-surface.mjs</c> counted 174
+    /// open out of 909 on 2026-10-14, and the shared manifest names three it
+    /// has not caught up with. This is how you reach the rest without
+    /// abandoning the SDK: it goes through the same authentication,
+    /// idempotency-key minting, retries and typed errors as every typed
+    /// method. Do not read either number as fixed; the open count grows as
+    /// routes are opened to key auth.
     /// </para>
     /// <para>
     /// A route that does <i>not</i> accept an API key answers 403 no matter
