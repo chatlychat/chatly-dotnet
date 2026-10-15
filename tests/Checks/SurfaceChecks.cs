@@ -17,7 +17,7 @@ namespace Chatly.Tests;
 /// The table below is written out by hand rather than read from
 /// <c>surface.json</c>, so that this package is self-contained — and because
 /// a check that reads the same file the implementation was written from can
-/// only catch a typo, not a misreading. Keep it in step with the spec: 162
+/// only catch a typo, not a misreading. Keep it in step with the spec: 163
 /// entries, and the count is asserted. The table itself lives in
 /// <c>SurfaceTable.cs</c> — same partial class, split out when 159 rows and
 /// these assertions together went past CONTRACT.md §9's 650-line ceiling.
@@ -83,7 +83,7 @@ public static partial class SurfaceChecks
         Expect.Equal("macros.delete", declaredEmpty[0].Name, "and it is macros.delete");
     }
 
-    /// <summary>The spec lists 162 methods, and this table must cover all of them.</summary>
+    /// <summary>The spec lists 163 methods, and this table must cover all of them.</summary>
     /// <remarks>
     /// The number is asserted rather than derived from the manifest so that a
     /// manifest that SHRINKS — a parser dropping rows, which has happened to
@@ -92,11 +92,14 @@ public static partial class SurfaceChecks
     /// routes got typed methods, and 162 once <c>webhooks.delete</c>,
     /// <c>root.me</c> and <c>workspace.mine</c> were added to the manifest —
     /// all three had been found key-accessible and unlisted by more than one
-    /// SDK author reading handlers.
+    /// SDK author reading handlers. 163 since
+    /// <c>visitors.start_conversation</c>, which was not found: it was
+    /// <i>opened</i> to API keys on 2026-10-14, having been session-only
+    /// before that.
     /// </remarks>
     public static Task TableCoversTheWholeSpec()
     {
-        Expect.Equal(162, Entries.Count, "surface.json has 162 entries and this table has one row each");
+        Expect.Equal(163, Entries.Count, "surface.json has 163 entries and this table has one row each");
 
         var seen = new HashSet<string>(StringComparer.Ordinal);
         foreach (var entry in Entries)
@@ -110,12 +113,12 @@ public static partial class SurfaceChecks
 
     /// <summary>
     /// The declared shape column really distinguishes routes: 33 arrays, 13
-    /// pages, 115 objects, 1 empty.
+    /// pages, 116 objects, 1 empty.
     /// </summary>
     /// <remarks>
     /// <para>
     /// Anti-vacuity, and not a hypothetical one. A column that said
-    /// <c>Object</c> 162 times would satisfy every other assertion in this file
+    /// <c>Object</c> 163 times would satisfy every other assertion in this file
     /// — the fake would answer <c>{}</c> everywhere, every method would decode
     /// it, and the lock would be internally consistent — and it would be
     /// worthless. That is very close to the state this column was in while
@@ -123,7 +126,8 @@ public static partial class SurfaceChecks
     /// bare-array routes were declared objects and nothing noticed.
     /// </para>
     /// <para>
-    /// The numbers come from reading all 162 <c>@ZodResponse</c> schemas —
+    /// The numbers come from reading all 163 handlers — 162 <c>@ZodResponse</c>
+    /// schemas and one service return type —
     /// 55 on 2026-10-12, the next 104 on 2026-10-14, and the last three with
     /// them. If the surface grows they change — but all four values must stay
     /// represented, and <c>empty</c> stays at exactly one until a second real
@@ -131,7 +135,11 @@ public static partial class SurfaceChecks
     /// </para>
     /// <para>
     /// The 104 added on 2026-10-14 moved the column from 14/10/30/1 to
-    /// 32/13/113/1, and the last three took it to 33/13/115/1. The
+    /// 32/13/113/1, and the last three took it to 33/13/115/1.
+    /// <c>visitors.start_conversation</c> took it to 33/13/116/1 on
+    /// 2026-10-14 — the one row here whose shape comes from a service return
+    /// type rather than a <c>@ZodResponse</c> schema, because its handler has
+    /// none. The
     /// <c>object</c> share going from 55% to 71% is why the anti-vacuity
     /// check matters more now than it did: the commonest value is now
     /// commoner still, so a wrongly-defaulted row is likelier to be right by
@@ -151,7 +159,7 @@ public static partial class SurfaceChecks
 
         Expect.Equal(33, count(ResponseShape.Array), "bare-array routes declared");
         Expect.Equal(13, count(ResponseShape.Page), "page routes declared");
-        Expect.Equal(115, count(ResponseShape.Object), "object routes declared");
+        Expect.Equal(116, count(ResponseShape.Object), "object routes declared");
         Expect.Equal(1, count(ResponseShape.Empty), "204 routes declared (macros.delete, and only it)");
 
         return Task.CompletedTask;

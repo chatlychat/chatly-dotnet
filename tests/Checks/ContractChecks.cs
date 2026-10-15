@@ -15,7 +15,7 @@ namespace Chatly.Tests;
 /// response-shape lock, lives in <see cref="SurfaceChecks"/> instead, because
 /// that is the file which writes surface.lock.json.
 /// </summary>
-public static class ContractChecks
+public static partial class ContractChecks
 {
     // ── §10.1 ─────────────────────────────────────────────────────────────
 

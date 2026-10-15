@@ -75,6 +75,12 @@ public static class CheckRegistry
         new Check("§8 the escape hatch uses the same pipeline", ContractChecks.EscapeHatchUsesTheSamePipeline),
         new Check("§2 an empty response body decodes as JSON null", ContractChecks.EmptyResponseBodyDecodesAsNull),
         new Check("§2 a bodyless write sends an empty JSON object", ContractChecks.BodylessWriteSendsAnEmptyObject),
+        new Check("§2 path-only writes send no caller data and an Idempotency-Key", ContractChecks.PathOnlyWritesSendNoBodyAndAnIdempotencyKey),
+        new Check("visitors.start_conversation surfaces the workspace opt-in and the per-contact limit", ContractChecks.StartConversationSurfacesTheOptInAndTheContactLimit),
+        new Check("bots.rotate_external_secret: an activateAt string is the only body key", RotationChecks.RotateWithActivateAtStringSendsExactlyThatKey),
+        new Check("bots.rotate_external_secret: a DateTimeOffset is sent as its UTC instant", RotationChecks.RotateWithDateTimeOffsetSendsTheUtcInstant),
+        new Check("bots.rotate_external_secret: no activateAt still sends {}", RotationChecks.RotateWithoutActivateAtSendsTheEmptyObject),
+        new Check("bots.rotate_external_secret: the response's activatesAt is readable", RotationChecks.RotateResponseExposesActivatesAt),
         new Check("§2 null fields are omitted from bodies", ContractChecks.NullFieldsAreOmittedFromBodies),
         new Check("§2 path parameters are percent-encoded", ContractChecks.PathParametersAreEncoded),
 
@@ -84,8 +90,8 @@ public static class CheckRegistry
         new Check("GET /v1/billing/usage sends the eventType and window", RouteShapeChecks.BillingUsageSendsEventTypeAndWindow),
 
         new Check("surface.json: the 204 fixture really sends no body", SurfaceChecks.TheEmptyFixtureReallySendsNoBody),
-        new Check("surface.json: the table covers all 162 methods", SurfaceChecks.TableCoversTheWholeSpec),
-        new Check("surface.json: the declared shapes are 33 array / 13 page / 115 object / 1 empty", SurfaceChecks.DeclaredShapeDistributionIsNotFlat),
+        new Check("surface.json: the table covers all 163 methods", SurfaceChecks.TableCoversTheWholeSpec),
+        new Check("surface.json: the declared shapes are 33 array / 13 page / 116 object / 1 empty", SurfaceChecks.DeclaredShapeDistributionIsNotFlat),
         new Check("surface.json: the fake's response shapes match the manifest", SurfaceChecks.DeclaredShapesMatchTheManifestAsync),
         new Check("surface.json: every method hits its route and decodes the declared shape", SurfaceChecks.EveryMethodHitsTheSpecifiedRoute),
         new Check("surface.json: every paged entry has an auto-paginator", SurfaceChecks.EveryPagedEntryHasAnAutoPaginator),

@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Net.Http;
 using System.Text.Json;
 using System.Threading;
@@ -301,25 +303,112 @@ public sealed class BotsResource
             cancellationToken);
 
     /// <summary>
-    /// Rotate an external agent's signing secret.
+    /// Rotate an external agent's signing secret, effective immediately.
     /// <c>POST /v1/bots/{id}/external/rotate-secret</c>.
     /// </summary>
     /// <remarks>
-    /// <b>There is no overlap window.</b> The old secret stops verifying the
-    /// moment this returns, so deploy the new one to your endpoint first, or
-    /// accept both for a minute. The new secret is in the response and
-    /// nowhere else.
+    /// <para>
+    /// <b>This overload is the hard cut.</b> The old secret stops signing
+    /// deliveries the moment this returns, so deploy the new one to your
+    /// endpoint first, or accept both for a minute. To keep the old secret
+    /// signing for a while, use the overload that takes an
+    /// <c>activateAt</c>. The new secret is in the response and nowhere
+    /// else.
+    /// </para>
+    /// <para>
+    /// The request body is <c>{}</c>, as for every bodyless write on this
+    /// transport — exactly what this method sent before the overlap window
+    /// existed.
+    /// </para>
     /// </remarks>
     /// <param name="botId">The external agent.</param>
     /// <param name="cancellationToken">Cancels the request.</param>
-    /// <returns><c>{ signingSecret }</c> — shown once.</returns>
+    /// <returns>
+    /// <c>{ signingSecret, activatesAt }</c>. <c>signingSecret</c> is shown
+    /// once. <c>activatesAt</c> is <c>null</c> here: the new secret is
+    /// already signing.
+    /// </returns>
     public Task<JsonElement> RotateExternalSecretAsync(
         string botId,
         CancellationToken cancellationToken = default)
+        => RotateExternalSecretCoreAsync(botId, null, cancellationToken);
+
+    /// <summary>
+    /// Rotate an external agent's signing secret, optionally with an overlap
+    /// window. <c>POST /v1/bots/{id}/external/rotate-secret</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// With an <paramref name="activateAt"/>, the new secret is issued now but
+    /// Chatly keeps signing every delivery with the <b>old</b> secret until
+    /// that instant, then switches. There is one signature per delivery, never
+    /// two, so during the window your verifier should accept <i>both</i>
+    /// secrets (<see cref="Chatly.ChatlyWebhooks"/> verification against
+    /// each in turn) and drop the old one once <c>activatesAt</c> has passed.
+    /// </para>
+    /// <para>
+    /// The instant is sent as UTC, <c>yyyy-MM-ddTHH:mm:ss.fffZ</c>, whatever
+    /// offset it carries. The server caps it at 168 hours ahead of <i>its</i>
+    /// clock and answers 400 beyond that; the SDK deliberately does not
+    /// re-check the bound against yours. An instant already in the past is a
+    /// hard cut, not an error, and so is any deferred rotation on an agent
+    /// that has no usable secret today — both answer
+    /// <c>activatesAt: null</c>.
+    /// </para>
+    /// <para>
+    /// <c>null</c> is the hard cut and sends exactly what the overload
+    /// without <paramref name="activateAt"/> sends.
+    /// </para>
+    /// </remarks>
+    /// <param name="botId">The external agent.</param>
+    /// <param name="activateAt">When the new secret starts signing, or <c>null</c> for now.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns>
+    /// <c>{ signingSecret, activatesAt }</c>. <c>signingSecret</c> is shown
+    /// once. <c>activatesAt</c> is <c>null</c> when the new secret is already
+    /// signing, otherwise the ISO 8601 instant the switch happens.
+    /// </returns>
+    public Task<JsonElement> RotateExternalSecretAsync(
+        string botId,
+        DateTimeOffset? activateAt,
+        CancellationToken cancellationToken = default)
+        => RotateExternalSecretCoreAsync(
+            botId,
+            activateAt?.ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture),
+            cancellationToken);
+
+    /// <summary>
+    /// Rotate an external agent's signing secret with an overlap window given
+    /// as an ISO 8601 string. <c>POST /v1/bots/{id}/external/rotate-secret</c>.
+    /// </summary>
+    /// <remarks>
+    /// Same semantics as the <see cref="DateTimeOffset"/> overload. The string
+    /// is sent verbatim — the server validates it, and requires a <c>Z</c> or
+    /// an explicit offset. <c>null</c> is the hard cut.
+    /// </remarks>
+    /// <param name="botId">The external agent.</param>
+    /// <param name="activateAt">An ISO 8601 instant, or <c>null</c> for now.</param>
+    /// <param name="cancellationToken">Cancels the request.</param>
+    /// <returns><c>{ signingSecret, activatesAt }</c>, as above.</returns>
+    public Task<JsonElement> RotateExternalSecretAsync(
+        string botId,
+        string? activateAt,
+        CancellationToken cancellationToken = default)
+        => RotateExternalSecretCoreAsync(botId, activateAt, cancellationToken);
+
+    private Task<JsonElement> RotateExternalSecretCoreAsync(
+        string botId,
+        string? activateAt,
+        CancellationToken cancellationToken)
         => _transport.WriteJsonAsync(
             HttpMethod.Post,
             $"{Collection}/{Route.Segment(botId, nameof(botId))}/external/rotate-secret",
-            null,
+            // A dictionary, not an anonymous type: the transport's camelCase
+            // policy applies to property names and leaves dictionary keys as
+            // given, so the wire key is exactly `activateAt` by construction.
+            // No activateAt means no body object at all, so the transport
+            // sends its usual `{}` — byte-identical to the hard cut it was.
+            activateAt is null ? null : new Dictionary<string, string> { ["activateAt"] = activateAt },
             null,
             cancellationToken);
 

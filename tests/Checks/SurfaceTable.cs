@@ -87,8 +87,11 @@ public static partial class SurfaceChecks
     }
 
     /// <summary>
-    /// The 162 entries of surface.json, in spec order, each with the response
-    /// shape its handler's <c>@ZodResponse</c> schema produces.
+    /// The 163 entries of surface.json, in spec order, each with the response
+    /// shape its handler's <c>@ZodResponse</c> schema produces — or, for the
+    /// one row whose handler has no such schema
+    /// (<c>visitors.start_conversation</c>), the service return type it
+    /// forwards.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -405,6 +408,18 @@ public static partial class SurfaceChecks
 
         // The third late-flagged page.
         new SurfaceEntry("triggers.list", "GET", "/v1/triggers", ResponseShape.Page, async (c, t) => await c.Triggers.ListAsync(t)),
+
+        // ── visitors ───────────────────────────────────────────────────────
+        // The 163rd row, and the only route in this table whose shape could
+        // not be read off a `@ZodResponse` schema: the handler has none, so it
+        // is read off what the service it forwards to is declared to return —
+        // `VisitorsService.startProactiveConversation(): Promise<{
+        // conversationId: string }>`. An object, therefore, and not a page.
+        //
+        // The two sibling routes on that controller, `GET /v1/visitors/live`
+        // and `GET /v1/visitors/{contactId}/pages`, are absent from this table
+        // because they carry no `@AllowApiKey()` and so are not surface.
+        new SurfaceEntry("visitors.start_conversation", "POST", "/v1/visitors/cont_1/start-conversation", ResponseShape.Object, async (c, t) => await c.Visitors.StartConversationAsync("cont_1", t)),
 
         // ── webhooks ───────────────────────────────────────────────────────
         // /v1/webhooks is the ENDPOINTS; /v1/webhooks/deliveries is the log,

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **`Bots.RotateExternalSecretAsync` takes an optional `activateAt`** — new
+  overloads `(botId, DateTimeOffset? activateAt, ct)` and
+  `(botId, string? activateAt, ct)`. With it, the new secret is issued now and
+  the old one keeps signing deliveries until that instant (at most 168h ahead,
+  enforced by the server); the body is exactly `{"activateAt":"…"}`, a
+  `DateTimeOffset` converted to UTC `yyyy-MM-ddTHH:mm:ss.fffZ`. The response
+  now carries `activatesAt` (`null` = already signing). Existing calls —
+  `(botId)`, `(botId, ct)` and `(botId, default)` — compile unchanged and
+  still send `{}`, the hard cut they always were.
 - **The whole manifest is covered: 162 methods, up from 55.** The 104 added
   are `ai`, `bots`, `bot_routes`, `brands`, `canvas_steps`,
   `customer_cards`, `customer_card_endpoints`, `docs_sources`,

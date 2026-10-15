@@ -115,6 +115,7 @@ public sealed class ChatlyClient : IDisposable
         EmailTemplates = new EmailTemplatesResource(transport);
         KnowledgeGaps = new KnowledgeGapsResource(transport);
         Triggers = new TriggersResource(transport);
+        Visitors = new VisitorsResource(transport);
     }
 
     private static Transport OwnedTransport(ChatlyClientOptions options)
@@ -224,6 +225,9 @@ public sealed class ChatlyClient : IDisposable
 
     /// <summary>Event-driven rules: conditions over a payload, and actions.</summary>
     public TriggersResource Triggers { get; }
+
+    /// <summary>Opening a thread with a contact who has not written to you.</summary>
+    public VisitorsResource Visitors { get; }
 
     /// <summary>
     /// Describe the credential this client is using: which workspace it

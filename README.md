@@ -113,7 +113,7 @@ an upsert only touches the fields you set.
 
 ## Every method
 
-162 methods, one per entry of the shared SDK manifest, each verified against
+163 methods, one per entry of the shared SDK manifest, each verified against
 its handler. Each takes an optional `CancellationToken` last.
 
 ### Credential
@@ -508,7 +508,7 @@ proposes rules for a person to approve, and it is metered AI spend, so
 | `RedeliverAsync(botId, deliveryId)`              | `POST /v1/bots/{id}/deliveries/{id}/redeliver` |
 | `TestDeliveryAsync(botId)`                       | `POST /v1/bots/{id}/test-delivery`             |
 | `UpdateExternalAsync(botId, changes)`            | `PATCH /v1/bots/{id}/external`                 |
-| `RotateExternalSecretAsync(botId)`               | `POST /v1/bots/{id}/external/rotate-secret`    |
+| `RotateExternalSecretAsync(botId, activateAt?)`  | `POST /v1/bots/{id}/external/rotate-secret`    |
 
 A _bot_ is a Chatly-hosted persona. An _external agent_ is a bot whose replies
 come from **your** endpoint: Chatly signs a payload and POSTs it to you. The
@@ -521,6 +521,18 @@ authenticate back to us with — and both are shown exactly once, by
 for your endpoint and returns the status and up to 2,000 characters of the
 body, where `RedeliverAsync` only reports that a job was queued. A delivery
 _list_ row does not carry the signed payload; `DeliveryAsync` does.
+
+`RotateExternalSecretAsync(botId)` is a hard cut: the old signing secret stops
+signing the moment it returns. Pass an `activateAt` (a `DateTimeOffset`, sent
+as UTC, or an ISO 8601 string with `Z` or an offset, sent verbatim) and the
+rotation has an overlap window instead: the new secret is issued now, and
+Chatly keeps signing every delivery with the old one until that instant. Each
+delivery carries one signature, so hold **both** secrets in your verifier for
+the window. The response is `{ signingSecret, activatesAt }` — `activatesAt`
+is `null` when the new secret is already signing (no `activateAt`, an instant
+already in the past, or an agent with no usable secret yet), otherwise the
+instant of the switch. More than 168 hours ahead is a 400, measured on the
+server's clock.
 
 ### Bot routing — `chatly.BotRoutes`
 
@@ -667,6 +679,45 @@ one it inserts, and there is no PATCH route. Both branches answer **201**, so
 do not branch on the status to tell a create from an update. `eventType` is a
 free string matched by exact equality at dispatch, so a trigger naming an
 event nothing publishes is accepted and simply never fires.
+
+### Visitors — `chatly.Visitors`
+
+| Method                              | Route                                              |
+| ----------------------------------- | -------------------------------------------------- |
+| `StartConversationAsync(contactId)` | `POST /v1/visitors/{contactId}/start-conversation` |
+
+Opens a thread with a contact who did **not** write first. No body and no
+query parameters: the contact id is the whole input. Answers
+`{ conversationId }`.
+
+**A 403 here is probably not your scopes.** It is off by default per
+workspace: the flag is
+`settings.proactiveOutreach.apiKeysMayStartConversations`, an owner or admin
+turns it on with `PATCH /v1/workspace/settings` (session-only, so not
+reachable from this SDK), and you can read its current value with
+`chatly.Workspace.SettingsAsync()`, which is. The scope is not the opt-in —
+`conversations:write` was already grantable and is already held by keys minted
+for ticket bulk actions and schedule-send — so check the setting before you go
+looking at your key.
+
+**Three per contact per hour**, counted per workspace and per contact rather
+than per caller. That 429 carries **no `Retry-After` header** — the server
+puts the wait in the error body at `error.details.retryAfterSeconds` — and
+this client reads only the header, so `ChatlyRateLimitException.RetryAfter` is
+`null` on it and you must read the wait from `.Body`. (The Ruby and Python
+clients do fall back to the body, so they report it; the missing header is a
+property of the route, the null is a property of this client.) A 429 from the
+API's global throttler buckets does carry the header, so do not assume one or
+the other.
+
+**An offline visitor is not notified.** The greeting is persisted and the
+widget renders it from history on their next page view — no email, no push, no
+provider message. To reach someone who has left the site, use an email or SMS
+conversation instead.
+
+The two sibling routes on that controller, `GET /v1/visitors/live` and
+`GET /v1/visitors/{contactId}/pages`, have no methods here: neither carries
+`@AllowApiKey()`, so both answer a key with 403.
 
 ### Helpers, which make no HTTP call
 
@@ -970,7 +1021,7 @@ sockets.
 
 ## The escape hatch
 
-162 key-accessible routes have a method here, and the API has more — the
+163 key-accessible routes have a method here, and the API has more — the
 live count was 174 open out of 909 on 2026-10-14, and it grows as routes are
 opened to key auth. For the rest, `RequestAsync` goes through the same authentication,
 idempotency-key minting, retries and typed errors:
@@ -1030,7 +1081,7 @@ dotnet run --project tests/Verify/Verify.csproj
 
 The suite covers all nine items of the cross-language SDK contract, including
 both pinned vectors (the identity-hash digest and the exact webhook delivery),
-and drives all 162 methods to assert the HTTP verb and path each one produces,
+and drives all 163 methods to assert the HTTP verb and path each one produces,
 plus the response shape its decoder expects.
 
 Running it also regenerates `surface.lock.json`, the committed record of the
