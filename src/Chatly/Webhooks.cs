@@ -25,7 +25,7 @@ namespace Chatly;
 /// without checking the construction.
 /// </para>
 /// </remarks>
-public static class ChatlyWebhooks
+public static partial class ChatlyWebhooks
 {
     /// <summary>
     /// The header carrying the signature on an outbound event webhook.

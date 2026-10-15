@@ -72,6 +72,10 @@ public static class CheckRegistry
 
         new Check("§10.8 identity_hash matches the pinned vector", CryptoChecks.IdentityHashMatchesThePinnedVector),
 
+        new Check("§6 VerifyChatlySignature agrees with every vector in signature_vectors.json", SignatureChecks.EveryCorpusVectorAgrees),
+        new Check("§6 VerifyChatlySignature refuses garbage and never throws", SignatureChecks.GarbageNeverThrows),
+        new Check("§6 VerifyChatlySignature: the surface table, HeadersFrom and infinite tolerance", SignatureChecks.SurfaceTableAndHelpers),
+
         new Check("§8 the escape hatch uses the same pipeline", ContractChecks.EscapeHatchUsesTheSamePipeline),
         new Check("§2 an empty response body decodes as JSON null", ContractChecks.EmptyResponseBodyDecodesAsNull),
         new Check("§2 a bodyless write sends an empty JSON object", ContractChecks.BodylessWriteSendsAnEmptyObject),

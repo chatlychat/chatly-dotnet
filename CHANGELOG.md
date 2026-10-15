@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+- **`ChatlyWebhooks.VerifyChatlySignature(ChatlySignatureInput)`** — one
+  verifier for all eight signed surfaces (`unified_v2`, `agent_delivery`,
+  `event_webhook`, `ai_tool_call`, `canvas_step`, `customer_card`,
+  `workflow_webhook`, `workflow_webhook_legacy`), ported from sdk-node's
+  `verifyChatlySignature`. Returns a `ChatlySignatureResult` with `Ok`,
+  `Surface`, `Base`, `TimestampMs`, `SecretIndex`, and on refusal one of
+  eleven stable `Reason` strings plus a printable `Message`, instead of a
+  bare `false`. Supports secret arrays for rotation, multi-`v1` headers, the
+  unified v2 header with `Prefer` / `Require` / `Ignore`, and the `b=` base
+  marker. Never throws. New public types: `ChatlySignatureInput`,
+  `ChatlySignatureResult`, `ChatlySignatureSurfaces`, `ChatlySignatureFailure`,
+  `ChatlySignatureBase`, `ChatlyV2Policy`; new constants
+  `ChatlyWebhooks.ChatlySignatureToleranceSeconds` (300) and
+  `ChatlyWebhooks.ChatlyV2SignatureHeader`. `ChatlyWebhooks` is now `partial`;
+  `VerifySignature` and `Sign` are unchanged.
+- Proven against the shared cross-SDK corpus
+  (`tests/Fixtures/signature_vectors.json`, byte-identical in every SDK): every
+  vector, every expected field. Where .NET defaults would have disagreed with
+  the reference — `Regex` `\d` matching non-ASCII digits, `Trim()`'s
+  whitespace set — the checks are written by hand. One deliberate divergence:
+  a timestamp too large for a `long` (or a seconds value whose ×1000
+  overflows) is `malformed_timestamp`, where Node reads it as a far-future
+  `timestamp_outside_tolerance`; and a `NaN` tolerance refuses rather than
+  accepts.
+
 - **`Bots.RotateExternalSecretAsync` takes an optional `activateAt`** — new
   overloads `(botId, DateTimeOffset? activateAt, ct)` and
   `(botId, string? activateAt, ct)`. With it, the new secret is issued now and

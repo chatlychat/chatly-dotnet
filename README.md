@@ -721,11 +721,12 @@ The two sibling routes on that controller, `GET /v1/visitors/live` and
 
 ### Helpers, which make no HTTP call
 
-| Function                                                                 | What it does                                                   |
-| ------------------------------------------------------------------------ | -------------------------------------------------------------- |
-| `ChatlyWebhooks.VerifySignature(body, header, secret, tolerance?, now?)` | Verify a webhook delivery                                      |
-| `ChatlyWebhooks.Sign(body, secret, timestamp)`                           | Build a genuine signature header, for testing your own handler |
-| `ChatlyIdentity.Hash(secret, externalId)`                                | The widget's `userHash`                                        |
+| Function                                                                 | What it does                                                        |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------- |
+| `ChatlyWebhooks.VerifySignature(body, header, secret, tolerance?, now?)` | Verify a webhook delivery                                           |
+| `ChatlyWebhooks.Sign(body, secret, timestamp)`                           | Build a genuine signature header, for testing your own handler      |
+| `ChatlyWebhooks.VerifyChatlySignature(input)`                            | Verify a request on ANY of the eight signed surfaces, with a reason |
+| `ChatlyIdentity.Hash(secret, externalId)`                                | The widget's `userHash`                                             |
 
 ### Not included, and why
 
@@ -959,6 +960,90 @@ header with `ChatlyWebhooks.Sign`:
 ```csharp
 var header = ChatlyWebhooks.Sign(rawBody, secret, DateTimeOffset.UtcNow);
 ```
+
+### Every other signed surface: `VerifyChatlySignature`
+
+Event webhooks are one of **eight** signed requests Chatly sends, and the
+header name does not tell you which construction you have — three surfaces
+send `x-chatly-signature` and sign three different strings, and two send
+**milliseconds**. `ChatlyWebhooks.VerifyChatlySignature` covers all eight, and
+instead of `false` it tells you why:
+
+```csharp
+app.MapPost("/chatly/tool", async (HttpRequest request, ILogger<Program> logger) =>
+{
+    using var buffer = new MemoryStream();
+    await request.Body.CopyToAsync(buffer);
+
+    var result = ChatlyWebhooks.VerifyChatlySignature(new ChatlySignatureInput
+    {
+        Surface = ChatlySignatureSurfaces.AiToolCall,
+        Body = buffer.ToArray(),                                    // the RAW bytes
+        Headers = ChatlySignatureInput.HeadersFrom(request.Headers),
+        Secret = toolSecret,
+        Method = request.Method,
+        Path = request.Path + request.QueryString,                  // never the host
+    });
+
+    if (!result.Ok)
+    {
+        logger.LogWarning("{Reason}: {Message}", result.Reason, result.Message);
+        return Results.Unauthorized();
+    }
+
+    return Results.Ok();
+});
+```
+
+| `Surface`                 | Header                      | Signs                               | `t` unit |
+| ------------------------- | --------------------------- | ----------------------------------- | -------- |
+| `unified_v2`              | `x-chatly-signature-v2`     | `<t>.<METHOD>.<path>.<body>`        | seconds  |
+| `agent_delivery`          | `x-chatly-signature`        | `<t>.<body>`                        | seconds  |
+| `event_webhook`           | `x-livechat-signature`      | `<t>.<body>`                        | seconds  |
+| `ai_tool_call`            | `x-chatly-signature`        | `<t>.<METHOD>.<path>.<body>`        | seconds  |
+| `canvas_step`             | `x-chatly-canvas-signature` | `<ts>.<body>`, ts in its own header | **ms**   |
+| `customer_card`           | `x-chatly-signature`        | `<ts>.<body>`, ts in its own header | **ms**   |
+| `workflow_webhook`        | `x-chatly-signature-v2`     | `<t>.<body>` (or the unified base)  | seconds  |
+| `workflow_webhook_legacy` | `x-chatly-signature`        | `<body>` alone — **no timestamp**   | n/a      |
+
+What the result carries:
+
+- **`Ok`**, and on success `Surface` (what actually verified — `unified_v2` when
+  the v2 header was preferred), `Base`, `TimestampMs` (always milliseconds, so
+  the two units compare; `null` on the legacy workflow surface) and
+  `SecretIndex`.
+- On failure, `Reason` — one of eleven stable strings in
+  `ChatlySignatureFailure`, the same in every Chatly SDK — and a `Message`
+  written to be logged.
+
+**Pass `Method` and `Path` on every surface.** Every surface is moving to the
+unified `x-chatly-signature-v2` header, sent alongside the legacy one. With the
+default `V2 = ChatlyV2Policy.Prefer`, a receiver that passes both gets that
+stronger check the day its sender starts emitting it, with no code change.
+Once v2 is chosen it is the only answer: a bad v2 digest beside a good legacy
+one is refused, not retried. `Require` refuses a request with no v2 header;
+`Ignore` verifies only the surface's own header.
+
+**Rotation works from both ends.** `Secrets` takes every secret live on the
+surface and `SecretIndex` says which one matched — index into the list as you
+passed it, empty entries included — which is how you learn the old secret is
+finally unused. A header carrying two `v1=` digests verifies when either
+matches. Set `Secret` or `Secrets`, and `Body` or `BodyText`, not both: both is
+refused rather than guessed at.
+
+It **never throws**. A header that arrived twice (under one name or two
+casings) is refused as `duplicate_signature_header` rather than trial-verified;
+a non-hex digest is `malformed_signature_header`, not a mismatch; a timestamp
+that is not ASCII digits or does not fit in a `long` is `malformed_timestamp`;
+stale and far-future timestamps are both `timestamp_outside_tolerance` (300 s
+either way by default, exactly 300 s allowed). `workflow_webhook_legacy` is
+refused as `replay_unprotected` unless you set `AllowUnprotectedReplay = true`,
+because nothing can bound a replay of a request with no timestamp.
+
+`HeadersFrom` copies ASP.NET Core's `request.Headers` or an
+`HttpRequestMessage`'s headers into the shape `Headers` takes. Lookup walks
+every key case-insensitively itself, so it does not matter what comparer your
+dictionary uses.
 
 ---
 
