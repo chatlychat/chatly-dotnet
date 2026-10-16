@@ -74,7 +74,13 @@ public static class CheckRegistry
 
         new Check("§6 VerifyChatlySignature agrees with every vector in signature_vectors.json", SignatureChecks.EveryCorpusVectorAgrees),
         new Check("§6 VerifyChatlySignature refuses garbage and never throws", SignatureChecks.GarbageNeverThrows),
+        new Check("§6 VerifyChatlySignature: the workflow action's dual-digest value", SignatureChecks.WorkflowDualDigestValueVerifies),
         new Check("§6 VerifyChatlySignature: the surface table, HeadersFrom and infinite tolerance", SignatureChecks.SurfaceTableAndHelpers),
+
+        new Check("§6 SignChatlyV2 mints what the reference mints", SignatureMintChecks.MintedValuesMatchTheReference),
+        new Check("§6 SignChatlyV2: a minted value verifies, on the base its marker claims", SignatureMintChecks.AMintedValueVerifies),
+        new Check("§6 SignChatlyV2: two mints compose the dual-digest value", SignatureMintChecks.TwoMintsComposeTheDualDigestValue),
+        new Check("§6 SignChatlyV2 refuses an input it cannot sign faithfully", SignatureMintChecks.AnUnsignableInputIsRefused),
 
         new Check("§8 the escape hatch uses the same pipeline", ContractChecks.EscapeHatchUsesTheSamePipeline),
         new Check("§2 an empty response body decodes as JSON null", ContractChecks.EmptyResponseBodyDecodesAsNull),

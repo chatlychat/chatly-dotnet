@@ -287,6 +287,142 @@ public static class SignatureChecks
     }
 
     /// <summary>
+    /// The workflow action's DUAL-DIGEST value: one <c>x-chatly-signature-v2</c>
+    /// carrying two digests and no <c>b=</c> marker.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The one construction a live sender emits that the shared corpus does not
+    /// hold. <c>WORKFLOW_WEBHOOK_V2_PHASE</c> in
+    /// <c>apps/worker/src/handlers/action-handlers/fire-webhook.ts</c> is
+    /// <c>'dual'</c> today:
+    /// </para>
+    /// <code>
+    /// x-chatly-signature-v2: t=&lt;T&gt;,v1=&lt;HMAC(&lt;T&gt;.&lt;METHOD&gt;.&lt;path&gt;.&lt;body&gt;)&gt;,v1=&lt;HMAC(&lt;T&gt;.&lt;body&gt;)&gt;
+    /// </code>
+    /// <para>
+    /// so a receiver that passes Method and Path gets the unified base and one
+    /// that does not still verifies, and neither has to change on the day the
+    /// sender drops to <c>'target'</c>. Three things make that true and each is
+    /// asserted below: the target digest wins when a target is available, the
+    /// body digest carries a receiver with none, and <c>Require</c> binds the
+    /// path instead of quietly taking the weaker digest sitting beside it.
+    /// </para>
+    /// <para>
+    /// Both digests are PINNED from the reference implementation
+    /// (<c>packages/sdk-node/src/signatures.ts</c>) rather than minted here: a
+    /// test that mints with the same base-string code it is testing agrees with
+    /// a wrong base string. Regenerate with (no double quotes, so it survives a
+    /// copy-paste):
+    /// </para>
+    /// <code>
+    /// node --input-type=module -e "import{createHmac}from'node:crypto';
+    ///   const s='whsec_dual_phase',b=JSON.stringify({workflow:'wf_1',run:7});
+    ///   const h=x=>createHmac('sha256',s).update(x).digest('hex');
+    ///   console.log(h('1760000000.POST./hooks/chatly?run=7.'+b),h('1760000000.'+b));"
+    /// </code>
+    /// </remarks>
+    public static Task WorkflowDualDigestValueVerifies()
+    {
+        const string Body = "{\"workflow\":\"wf_1\",\"run\":7}";
+        const string Secret = "whsec_dual_phase";
+        const string Method = "POST";
+        const string PathAndQuery = "/hooks/chatly?run=7";
+        const long NowMs = 1_760_000_000_000;
+        const string TargetDigest = "f1b09a141a4ac0a8b9e2902225312f679caa016cb26df48aa6a0e0cf1e4f4b36";
+        const string BodyDigest = "8e5164b6f89caf31b699bc6e3d8b413d5f8edc870a21fc8788745bfaf565b874";
+        const string Value = "t=1760000000,v1=" + TargetDigest + ",v1=" + BodyDigest;
+
+        var dual = new ChatlySignatureInput
+        {
+            Surface = ChatlySignatureSurfaces.WorkflowWebhook,
+            BodyText = Body,
+            Headers = Map((ChatlyWebhooks.ChatlyV2SignatureHeader, new string?[] { Value })),
+            Secret = Secret,
+            NowMs = NowMs,
+        };
+        var targeted = dual with { Method = Method, Path = PathAndQuery };
+
+        // 1. A receiver that passes its method and path gets the unified base.
+        var strong = ChatlyWebhooks.VerifyChatlySignature(targeted);
+        Expect.True(strong.Ok, $"the dual value verifies with a target ({strong.Message})");
+        Expect.Equal(ChatlySignatureSurfaces.WorkflowWebhook, strong.Surface, "surface");
+        Expect.Equal(ChatlySignatureBase.Target, strong.Base, "the TARGET digest is the one that wins");
+        Expect.Equal<int?>(0, strong.SecretIndex, "secretIndex");
+        Expect.Equal<long?>(NowMs, strong.TimestampMs, "timestampMs");
+
+        // 2. A receiver with no target still verifies, on the second digest.
+        var weak = ChatlyWebhooks.VerifyChatlySignature(dual);
+        Expect.True(weak.Ok, $"the dual value verifies with no target ({weak.Message})");
+        Expect.Equal(ChatlySignatureBase.Body, weak.Base, "the BODY digest carries a receiver with no target");
+
+        // 3. Read as unified_v2 it is the target base and NOTHING else: the body
+        //    digest beside it buys a receiver with no method/path nothing, which
+        //    is a named refusal rather than a silent downgrade.
+        var unified = ChatlyWebhooks.VerifyChatlySignature(targeted with { Surface = ChatlySignatureSurfaces.UnifiedV2 });
+        Expect.True(unified.Ok, $"the dual value verifies as unified_v2 ({unified.Message})");
+        Expect.Equal(ChatlySignatureBase.Target, unified.Base, "unified_v2 reads the target digest");
+        var unifiedNoTarget = ChatlyWebhooks.VerifyChatlySignature(dual with { Surface = ChatlySignatureSurfaces.UnifiedV2 });
+        Expect.Equal(
+            ChatlySignatureFailure.MissingRequestTarget,
+            unifiedNoTarget.Reason,
+            "unified_v2 with no target names the cause");
+
+        // The method is upper-cased into the base string, as the table says.
+        var lowercase = ChatlyWebhooks.VerifyChatlySignature(targeted with { Method = "post" });
+        Expect.True(lowercase.Ok, $"a lower-case method normalises ({lowercase.Message})");
+        Expect.Equal(ChatlySignatureBase.Target, lowercase.Base, "still the target base");
+
+        // The cost of the dual phase, stated: a proxy that rewrote the path does
+        // not break the delivery, because the body digest is still there — but
+        // Base reads "body", so a receiver can SEE the path was not covered.
+        var rewritten = ChatlyWebhooks.VerifyChatlySignature(targeted with { Path = "/elsewhere" });
+        Expect.True(rewritten.Ok, $"a rewritten path falls to the body base ({rewritten.Message})");
+        Expect.Equal(ChatlySignatureBase.Body, rewritten.Base, "and says so");
+
+        // Which is why a receiver that wants the path bound in has to ask.
+        var required = ChatlyWebhooks.VerifyChatlySignature(targeted with { Path = "/elsewhere", V2 = ChatlyV2Policy.Require });
+        Expect.Equal(
+            ChatlySignatureFailure.SignatureMismatch,
+            required.Reason,
+            "Require refuses the weaker digest beside it");
+        var requiredRight = ChatlyWebhooks.VerifyChatlySignature(targeted with { V2 = ChatlyV2Policy.Require });
+        Expect.True(requiredRight.Ok, $"Require is already satisfiable today ({requiredRight.Message})");
+        Expect.Equal(ChatlySignatureBase.Target, requiredRight.Base, "on the target base");
+
+        // One byte of body fails BOTH digests.
+        var tampered = ChatlyWebhooks.VerifyChatlySignature(
+            targeted with { BodyText = Body.Replace("\"run\":7", "\"run\":8", StringComparison.Ordinal) });
+        Expect.Equal(ChatlySignatureFailure.SignatureMismatch, tampered.Reason, "one byte of body breaks both digests");
+
+        // The replay window still bounds it: exactly 300 s is inside, 301 s is not.
+        Expect.True(
+            ChatlyWebhooks.VerifyChatlySignature(targeted with { NowMs = NowMs + 300_000 }).Ok,
+            "exactly the tolerance is inside, in every SDK");
+        Expect.Equal(
+            ChatlySignatureFailure.TimestampOutsideTolerance,
+            ChatlyWebhooks.VerifyChatlySignature(targeted with { NowMs = NowMs + 301_000 }).Reason,
+            "301s is outside");
+
+        // Two of them is a proxy, not two chances.
+        var doubled = ChatlyWebhooks.VerifyChatlySignature(
+            targeted with { Headers = Map((ChatlyWebhooks.ChatlyV2SignatureHeader, new string?[] { Value, Value })) });
+        Expect.Equal(
+            ChatlySignatureFailure.DuplicateSignatureHeader,
+            doubled.Reason,
+            "the value arriving twice is refused, not trial-verified");
+
+        // Mid-rotation, the index is into the list the CALLER passed.
+        var rotating = ChatlyWebhooks.VerifyChatlySignature(
+            targeted with { Secret = null, Secrets = new string?[] { "", "whsec_wrong", Secret } });
+        Expect.True(rotating.Ok, $"a live secret later in the list verifies ({rotating.Message})");
+        Expect.Equal<int?>(2, rotating.SecretIndex, "the caller's own index");
+        Expect.Equal(ChatlySignatureBase.Target, rotating.Base, "on the target base");
+
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
     /// The exported table, the helper and an infinite tolerance — the parts the
     /// corpus does not reach.
     /// </summary>

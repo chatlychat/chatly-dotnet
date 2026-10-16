@@ -1045,6 +1045,53 @@ because nothing can bound a replay of a request with no timestamp.
 every key case-insensitively itself, so it does not matter what comparer your
 dictionary uses.
 
+### Minting one, to test your own handler: `SignChatlyV2`
+
+The other direction, for a test that stands up a fake Chatly and fires a signed
+request at your own endpoint. Until this existed you had to re-derive
+`<t>.<METHOD>.<path>.<rawBody>` by hand from the documentation — and a
+hand-derived base string is the one thing a signature test must not have: get
+it wrong the same way in the test and nowhere else, and the test passes while
+production refuses every delivery.
+
+```csharp
+var header = ChatlyWebhooks.SignChatlyV2(new ChatlyV2MintInput
+{
+    Base = ChatlyV2MintBase.Target,     // Target: <t>.<METHOD>.<path>.<body>
+    Secret = secret,                    // Body:   <t>.<body>
+    TimestampSeconds = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),   // SECONDS
+    Method = "POST",
+    Path = "/hooks/chatly?run=7",       // pathname + query, never the host
+    Body = rawBody,                     // or BodyText, not both
+});
+// t=1760000000,v1=<64 hex>,b=t
+```
+
+`Base` has no sensible default: the two constructions are indistinguishable
+from the value alone, which is precisely why the `b=` marker exists, so a
+caller has to say which one they mean. `Target` emits `b=t` and `Body` emits
+`b=b`; this never emits an absent marker, which on the wire means `Body`.
+`ChatlyWebhooks.ChatlyV2BaseString(input)` returns the exact bytes the MAC is
+taken over, so a test can pin the construction and not only the digest.
+
+A record with named properties rather than six positional arguments, because
+the construction is three strings in a row and
+`SignChatlyV2(secret, t, method, path, body)` compiles with `path` and `body`
+swapped — it then mints a digest nobody can reproduce, which arrives at the
+receiver as "signature mismatch" and sends whoever wrote it hunting their own
+secret. For the same reason this one **throws** on an input it cannot sign
+faithfully (an undefined `Base`, an empty `Secret`, a negative
+`TimestampSeconds`, no body, both bodies, or a `Target` with no `Method` or
+`Path`), where the verifier never throws: a verifier that throws is an
+accepted webhook in a handler that forgot to catch, but a mint that quietly
+signs the wrong string is a test that passes while production fails.
+
+The one wire value it will not produce on its own is the workflow action's
+current **dual-digest** form, `t=<T>,v1=<target>,v1=<body>` with no marker.
+Build it from two mints by taking the `v1=` field out of each — which is
+exactly what the producer does, and what `tests/Checks/SignatureMintChecks.cs`
+asserts.
+
 ---
 
 ## Widget identity verification

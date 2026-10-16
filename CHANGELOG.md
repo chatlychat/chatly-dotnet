@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- **`ChatlyWebhooks.SignChatlyV2(ChatlyV2MintInput)`** — mint an
+  `x-chatly-signature-v2` value, for a test that stands up a fake Chatly.
+  New public types `ChatlyV2MintInput` (a record with named properties, not six
+  positional arguments: the construction is three strings in a row and a
+  swapped `Path`/`Body` compiles and mints a digest nobody can reproduce) and
+  `ChatlyV2MintBase` (`Target` → `b=t` over `<t>.<METHOD>.<path>.<rawBody>`,
+  `Body` → `b=b` over `<t>.<rawBody>`; an absent marker is never emitted).
+  `ChatlyWebhooks.ChatlyV2BaseString(input)` returns the exact signed bytes so
+  a test can pin the construction and not only the digest. Both **throw** on an
+  input they cannot sign faithfully — an undefined `Base`, an empty `Secret`, a
+  negative `TimestampSeconds`, no body, both bodies, or a `Target` with no
+  `Method` or `Path` — which is the opposite of the verifier and for the
+  opposite reason. A port of `signChatlyV2` in sdk-node, with both digests
+  pinned in `tests/Checks/SignatureMintChecks.cs` against values the reference
+  produced: a mint asserted against its own base-string construction agrees
+  with a wrong one. Not for signing real outbound traffic.
 - **`ChatlyWebhooks.VerifyChatlySignature(ChatlySignatureInput)`** — one
   verifier for all eight signed surfaces (`unified_v2`, `agent_delivery`,
   `event_webhook`, `ai_tool_call`, `canvas_step`, `customer_card`,
